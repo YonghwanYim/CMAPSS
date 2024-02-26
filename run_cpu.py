@@ -44,6 +44,7 @@ class RunCPU():
 
 
 runCPU = RunCPU('config1.ini')
-
+# test
+runCPU.run_many()
 
 
