@@ -10,6 +10,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import random
 
+# tensorflow.keras 오류 수정하자. loss 5,6 학습할 때 필요함.
+from tensorflow.keras import layers, models
+
+from loss import directed_mse_loss
 
 class SimulationEnvironment():
     def __init__(self):
@@ -67,6 +71,22 @@ class SimulationEnvironment():
         merged["RUL"] = merged["max_time_cycle"] - merged['time_cycles']
         merged = merged.drop("max_time_cycle", axis=1)
         return merged
+
+    def add_RUL_column_to_sampled_datasets(self, sampled_datasets):
+        # 새로운 샘플링 결과를 저장할 리스트 초기화
+        sampled_data_with_RUL_list = []
+
+        # 각각의 샘플링 데이터셋에 RUL 열 추가
+        for sampled_train, sampled_test, sampled_full in sampled_datasets:
+            sampled_train_with_RUL = self.add_RUL_column(sampled_train)
+            sampled_test_with_RUL = self.add_RUL_column(sampled_test)
+            sampled_full_with_RUL = self.add_RUL_column(sampled_full)
+
+            # 결과를 리스트에 추가
+            sampled_data_with_RUL_list.append((sampled_train_with_RUL, sampled_test_with_RUL, sampled_full_with_RUL))
+
+        return sampled_data_with_RUL_list
+
 
 
 
