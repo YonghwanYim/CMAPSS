@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import seaborn as sns
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import sklearn
 from sklearn.metrics import mean_squared_error, r2_score
