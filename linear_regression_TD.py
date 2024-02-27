@@ -43,8 +43,9 @@ class Linear_Regression_TD() :
 
     self.W = np.linalg.inv(X_T_X + (self.alpha * X_diff_T_X_diff_sum) + self.lambda_identity) @ (X_T_Y - self.alpha * X_diff_T_sum)
 
-    print(self.W)
-    print(self.W.shape)
+    # Print weight
+    #print(self.W)
+    #print(self.W.shape)
 
 # X를 입력 받으면 첫 열에 1의 값을 갖는 열을 추가해서 계산해야함. (입력으로 들어오는 X는 (n, 21)이니 (n, 22)로 바꿔줘야 함)
   def predict( self, X) :

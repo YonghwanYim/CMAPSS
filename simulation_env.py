@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import seaborn as sns
-from sklearn.linear_model import LinearRegression
 import sklearn
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
@@ -13,7 +12,7 @@ import random
 # tensorflow.keras 오류 수정하자. loss 5,6 학습할 때 필요함.
 from tensorflow.keras import layers, models
 
-from loss import directed_mse_loss
+
 
 class SimulationEnvironment():
     def __init__(self):
@@ -109,6 +108,8 @@ class SimulationEnvironment():
         scaled_data = scaler.fit_transform(data)
 
         return scaled_data
+
+
 
 
 
