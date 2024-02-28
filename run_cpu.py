@@ -4,6 +4,7 @@ from sklearn.metrics import mean_squared_error
 import configparser
 import tensorflow as tf
 from tensorflow.keras import layers, models
+import numpy as np
 
 # Custom .py
 from linear_regression_TD import Linear_Regression_TD
@@ -13,6 +14,9 @@ from loss import directed_mse_loss
 
 # generate configuration instance
 config = configparser.ConfigParser()
+
+# a list to store dataframes containing simulation results for each sample
+full_by_loss_dfs_list = []
 
 class RunCPU():
     def __init__(self, config_path):
@@ -25,8 +29,20 @@ class RunCPU():
         self.num_sample_datasets = int(config['SimulationSettings']['num_sample_datasets'])
         # Randomly extract only a subset of observational probability data from the entire dataset
         self.observation_probability = float(config['SimulationSettings']['observation_probability'])
+
         # Constant for crucial_moment loss
         self.crucial_moment = int(config['SimulationSettings']['crucial_moment'])
+        self.td_crucial_moment = int(config['SimulationSettings']['td_crucial_moment'])
+        self.directed_crucial_moment = int(config['SimulationSettings']['directed_crucial_moment'])
+
+        # constant of simulation
+        self.threshold_start = int(config['SimulationSettings']['threshold_start'])
+        self.threshold_end = int(config['SimulationSettings']['threshold_end'])
+        self.threshold_values = list(range(self.threshold_start, self.threshold_end + 1))
+
+        # Define cost
+        self.REPLACE_COST = int(config['SimulationSettings']['REPLACE_COST'])
+        self.FAILURE_COST = int(config['SimulationSettings']['FAILURE_COST'])
 
         # class instance 생성
         self.env = SimulationEnvironment()
@@ -86,6 +102,9 @@ class RunCPU():
         y_lr3_full = lr3.predict(x_full)    # Prediction on full data
 
         # 4. TD + Crucial moments loss function - Linear Regression (ridge) ##############
+        filtered_data = x_train[y_train <= self.td_crucial_moment]
+        filtered_labels = y_train[y_train <= self.td_crucial_moment]
+
         lr4 = Linear_Regression_TD()
         lr4.fit(filtered_data, filtered_labels, 0.5, 10)  # Fitting; fit(X, Y, alpha, lambda)
 
@@ -93,25 +112,81 @@ class RunCPU():
         y_lr4_valid = lr4.predict(x_valid)  # Prediction on validation data
         y_lr4_full = lr4.predict(x_full)    # Prediction on full data
 
-        # 5. Directed MSE
+        # 5. Directed MSE ################################################################
+        y_train_float = y_train.astype(np.float32) # penalty를 활용할 때 data type을 맞춰주기 위함.
+        lr5 = models.Sequential([
+            layers.Input(shape=(x_train.shape[1],)),
+            layers.Dense(1)   # fully connected layer -> 1 (number of output node)
+        ])
+        lr5.compile(optimizer='adam', loss=directed_mse_loss)   # model compile
+        lr5.fit(x_train, y_train_float, epochs=2500, verbose=0) # fitting (verbose=2 -> print loss / epoch)
 
+        # 이 단계가 colab에 비해 10배정도 빠름. (colab : 2ms/step ; local : 250us/step)
+        y_lr5_train = lr5.predict(x_train)  # Prediction on train data
+        y_lr5_valid = lr5.predict(x_valid)  # Prediction on validation data
+        y_lr5_full = lr5.predict(x_full)    # Prediction on full data
 
+        # 6. Directed Crucial moments MSE #################################################
+        filtered_data = x_train[y_train <= self.directed_crucial_moment]
+        filtered_labels = y_train_float[y_train_float <= self.directed_crucial_moment]
 
+        lr6 = models.Sequential([
+            layers.Input(shape=(x_train.shape[1],)),
+            layers.Dense(1)   # fully connected layer -> 1 (number of output node)
+        ])
+        lr6.compile(optimizer='adam', loss=directed_mse_loss)            # model compile
+        lr6.fit(filtered_data, filtered_labels, epochs=2500, verbose=0)  # fitting (verbose=2 -> print loss / epoch)
 
+        y_lr6_train = lr6.predict(x_train)  # Prediction on train data
+        y_lr6_valid = lr6.predict(x_valid)  # Prediction on validation data
+        y_lr6_full = lr6.predict(x_full)  # Prediction on full data
+
+        # Remove index for concat. If not removed, NaN values will be included in the dataframe.
+        valid_index_names = valid_index_names.reset_index(drop=True)
+        y_valid = y_valid.reset_index(drop=True)
+        full_index_names = full_index_names.reset_index(drop=True)
+        y_full = y_full.reset_index(drop=True)
+
+        # merge dataframe (valid)
+        merged_valid_dfs = self.env.merge_dataframe(valid_index_names, y_valid,
+                                                    y_lr1_valid, y_lr2_valid, y_lr3_valid,
+                                                    y_lr4_valid, y_lr5_valid, y_lr6_valid)
+
+        # merge dataframe (full)
+        merged_full_dfs = self.env.merge_dataframe(full_index_names, y_full,
+                                                    y_lr1_full, y_lr2_full, y_lr3_full,
+                                                    y_lr4_full, y_lr5_full, y_lr6_full)
+
+        # plot online prediction
+        #self.env.plot_online_RUL_prediction(merged_valid_dfs)
+        #self.env.plot_online_RUL_prediction(merged_full_dfs)
+
+        # simulation by threshold
+        full_by_threshold_dfs_list = self.env.random_obs_simulation_by_threshold(merged_full_dfs, self.threshold_values,
+                                                                      self.REPLACE_COST, self.FAILURE_COST)
+        # Organize learning results by loss function
+        full_by_loss_dfs = self.env.calculate_NoF_AUT_by_threshold(full_by_threshold_dfs_list, self.threshold_values)
+
+        # save the learning results to a global variable
+        full_by_loss_dfs_list.append(full_by_loss_dfs)
+
+        self.env.plot_NoF_AUT_by_threshold(full_by_loss_dfs, self.num_dataset)
+        self.env.plot_AC_AUT_by_threshold(full_by_loss_dfs, self.num_dataset)
 
     def run_many(self):
-        # run_lr_simulation()을 data sample만큼 반복수행.
-        # 나중에 코드 추가하자.
-        # 여기서 sample 수 만큼 실행하고, 평균을 낸 후 파일로 저장하는 것 까지는 다뤄주면 좋음.
-        print("test")
+        # Iterate over the number of sample datasets
+        for i in range(self.num_sample_datasets):
+            # Perform simulation for the current sample dataset index
+            self.run_lr_simulation(i)
+            print(f"Completed sample index: {i + 1} out of {self.num_sample_datasets}")
 
+        print("Done")
 
-
+        print(full_by_loss_dfs_list)
 
 
 runCPU = RunCPU('config1.ini')
-# test
-runCPU.run_lr_simulation(0)
+runCPU.run_many()
 
 
 
