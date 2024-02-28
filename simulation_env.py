@@ -367,7 +367,13 @@ class SimulationEnvironment():
         plt.tight_layout()  # subplot interval
         plt.show()
 
+    # 1. 돌아와서 여기에 plot 최종 결과 그래프 출력하는 method 추가.
 
+    # 2. 여기에 plot 최종 결과 그래프 출력하는 method (custom_labels 입력으로 받고 크기 조절하는)
+
+    # 3. 최종 학습 결과 list를 입력으로 받아서 평균내는 method
+
+    # 4. 평균낸 결과를 파일로 저장하는 method (이게 있어야 RL simulation 결과를 함께 plot 가능)
 
 
 

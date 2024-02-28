@@ -188,5 +188,7 @@ class RunCPU():
 runCPU = RunCPU('config1.ini')
 runCPU.run_many()
 
+# plot을 위함.
+custom_labels = ['Original MSE', 'crucial 50', 'TD', 'TD crucial 50', 'Directed', 'Directed crucial 50']
 
 
