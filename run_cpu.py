@@ -82,10 +82,7 @@ class RunCPU():
         # 1. Original Linear Regression #################################################
         lr1 = LinearRegression()
         lr1.fit(x_train, y_train)  # Fitting
-
-        y_lr1_train = lr1.predict(x_train)  # Prediction on train data
-        y_lr1_valid = lr1.predict(x_valid)  # Prediction on validation data
-        y_lr1_full = lr1.predict(x_full)    # Prediction on full data
+        y_lr1_train, y_lr1_valid, y_lr1_full = self.env.predict_and_save(lr1, x_train, x_valid, x_full)
 
         # 2. Crucial moments loss function - Linear Regression ##########################
         # Filter and save only data that is less than crucial moment constant.
@@ -94,18 +91,12 @@ class RunCPU():
 
         lr2 = LinearRegression()
         lr2.fit(filtered_data, filtered_labels)  # Fitting
-
-        y_lr2_train = lr2.predict(x_train)  # Prediction on train data
-        y_lr2_valid = lr2.predict(x_valid)  # Prediction on validation data
-        y_lr2_full = lr2.predict(x_full)    # Prediction on full data
+        y_lr2_train, y_lr2_valid, y_lr2_full = self.env.predict_and_save(lr2, x_train, x_valid, x_full)
 
         # 3. TD Loss function - Linear Regression (ridge) ################################
         lr3 = Linear_Regression_TD()
         lr3.fit(x_train, y_train, 0.5, 10)  # Fitting; fit(X, Y, alpha, lambda)
-
-        y_lr3_train = lr3.predict(x_train)  # Prediction on train data
-        y_lr3_valid = lr3.predict(x_valid)  # Prediction on validation data
-        y_lr3_full = lr3.predict(x_full)    # Prediction on full data
+        y_lr3_train, y_lr3_valid, y_lr3_full = self.env.predict_and_save(lr3, x_train, x_valid, x_full)
 
         # 4. TD + Crucial moments loss function - Linear Regression (ridge) ##############
         filtered_data = x_train[y_train <= self.td_crucial_moment]
@@ -113,10 +104,7 @@ class RunCPU():
 
         lr4 = Linear_Regression_TD()
         lr4.fit(filtered_data, filtered_labels, 0.5, 10)  # Fitting; fit(X, Y, alpha, lambda)
-
-        y_lr4_train = lr4.predict(x_train)  # Prediction on train data
-        y_lr4_valid = lr4.predict(x_valid)  # Prediction on validation data
-        y_lr4_full = lr4.predict(x_full)    # Prediction on full data
+        y_lr4_train, y_lr4_valid, y_lr4_full = self.env.predict_and_save(lr4, x_train, x_valid, x_full)
 
         # 5. Directed MSE ################################################################
         y_train_float = y_train.astype(np.float32) # penalty를 활용할 때 data type을 맞춰주기 위함.
@@ -126,11 +114,7 @@ class RunCPU():
         ])
         lr5.compile(optimizer='adam', loss=directed_mse_loss)   # model compile
         lr5.fit(x_train, y_train_float, epochs=2500, verbose=0) # fitting (verbose=2 -> print loss / epoch)
-
-        # 이 단계가 colab에 비해 10배정도 빠름. (colab : 2ms/step ; local : 250us/step)
-        y_lr5_train = lr5.predict(x_train)  # Prediction on train data
-        y_lr5_valid = lr5.predict(x_valid)  # Prediction on validation data
-        y_lr5_full = lr5.predict(x_full)    # Prediction on full data
+        y_lr5_train, y_lr5_valid, y_lr5_full = self.env.predict_and_save(lr5, x_train, x_valid, x_full)
 
         # 6. Directed Crucial moments MSE #################################################
         filtered_data = x_train[y_train <= self.directed_crucial_moment]
@@ -142,10 +126,7 @@ class RunCPU():
         ])
         lr6.compile(optimizer='adam', loss=directed_mse_loss)            # model compile
         lr6.fit(filtered_data, filtered_labels, epochs=2500, verbose=0)  # fitting (verbose=2 -> print loss / epoch)
-
-        y_lr6_train = lr6.predict(x_train)  # Prediction on train data
-        y_lr6_valid = lr6.predict(x_valid)  # Prediction on validation data
-        y_lr6_full = lr6.predict(x_full)  # Prediction on full data
+        y_lr6_train, y_lr6_valid, y_lr6_full = self.env.predict_and_save(lr6, x_train, x_valid, x_full)
 
         # Remove index for concat. If not removed, NaN values will be included in the dataframe.
         valid_index_names = valid_index_names.reset_index(drop=True)
