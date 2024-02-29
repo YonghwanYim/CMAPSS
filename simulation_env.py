@@ -496,7 +496,7 @@ class SimulationEnvironment():
 
         return result_dfs
 
-    def predict_and_save(model_instance, train_data, valid_data, full_data):
+    def predict_and_save(self, model_instance, train_data, valid_data, full_data):
         """ A method that returns the predictions for each dataset.
 
         Args:
