@@ -5,6 +5,7 @@ import configparser
 import tensorflow as tf
 from tensorflow.keras import layers, models
 import numpy as np
+import pickle        # it is suitable for saving Python objects.
 
 # Custom .py
 from linear_regression_TD import Linear_Regression_TD
@@ -17,12 +18,14 @@ config = configparser.ConfigParser()
 
 # a list to store dataframes containing simulation results for each sample
 full_by_loss_dfs_list = []
+average_by_loss_dfs = []
 
 class RunCPU():
     def __init__(self, config_path):
         config.read(config_path)
         # number of dataset (1, 2, 3, 4)
         self.num_dataset = int(config['SimulationSettings']['num_dataset'])
+        self.loss_labels = eval(config['SimulationSettings']['loss_labels'])  # 문자열 리스트를 리스트로 변환
         # The boundary value of unit numbers for dividing the train and valid datasets
         self.split_unit_number = int(config['SimulationSettings']['split_unit_number'])
         # Number of sample datasets
@@ -170,8 +173,11 @@ class RunCPU():
         # save the learning results to a global variable
         full_by_loss_dfs_list.append(full_by_loss_dfs)
 
-        self.env.plot_NoF_AUT_by_threshold(full_by_loss_dfs, self.num_dataset)
-        self.env.plot_AC_AUT_by_threshold(full_by_loss_dfs, self.num_dataset)
+        #self.env.plot_NoF_AUT_by_threshold(full_by_loss_dfs, self.num_dataset)
+        #self.env.plot_AC_AUT_by_threshold(full_by_loss_dfs, self.num_dataset)
+
+        #self.env.plot_simulation_results(full_by_loss_dfs, self.num_dataset)
+        #self.env.plot_simulation_results_scale_up(full_by_loss_dfs, self.num_dataset, self.loss_labels)
 
     def run_many(self):
         # Iterate over the number of sample datasets
@@ -180,15 +186,27 @@ class RunCPU():
             self.run_lr_simulation(i)
             print(f"Completed sample index: {i + 1} out of {self.num_sample_datasets}")
 
-        print("Done")
+        # calculate average performance
+        average_by_loss_dfs = self.env.calculate_average_performance(full_by_loss_dfs_list, self.num_sample_datasets)
 
-        print(full_by_loss_dfs_list)
+        # Save average_by_loss_dfs to a file using pickle
+        with open('average_by_loss_dfs.pkl', 'wb') as f:
+            pickle.dump(average_by_loss_dfs, f)
 
+        self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
 
 runCPU = RunCPU('config1.ini')
 runCPU.run_many()
 
-# plot을 위함.
-custom_labels = ['Original MSE', 'crucial 50', 'TD', 'TD crucial 50', 'Directed', 'Directed crucial 50']
+"""
+   * Later, you can load the file to retrieve the data.
+
+# Load average_by_loss_dfs from the file
+with open('average_by_loss_dfs.pkl', 'rb') as f:
+    average_by_loss_dfs = pickle.load(f)
+
+"""
+
+
 
 
