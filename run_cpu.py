@@ -6,12 +6,15 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 import numpy as np
 import pickle        # it is suitable for saving Python objects.
+import warnings
 
 # Custom .py
 from linear_regression_TD import Linear_Regression_TD
 from simulation_env import SimulationEnvironment
 from loss import directed_mse_loss
 
+# Filter out the warning
+warnings.filterwarnings("ignore", message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated.*")
 
 # generate configuration instance
 config = configparser.ConfigParser()
