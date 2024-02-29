@@ -266,7 +266,7 @@ class SimulationEnvironment():
 
         Args:
             by_loss_dfs (list) : a list of dataframes for each threshold.
-            dataset_number (int): The number of the dataset (1, 2, 3, or 4).
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
         """
 
         fig, axs = plt.subplots(len(by_loss_dfs), 1,
@@ -319,7 +319,7 @@ class SimulationEnvironment():
 
         Args:
             by_loss_dfs (list) : a list of dataframes for each threshold.
-            dataset_number (int): The number of the dataset (1, 2, 3, or 4).
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
         """
 
         fig, axs = plt.subplots(len(by_loss_dfs), 1,
@@ -366,14 +366,137 @@ class SimulationEnvironment():
 
         plt.tight_layout()  # subplot interval
         plt.show()
+    def plot_simulation_results(self, by_loss_dfs, dataset_number):
+        """ Displaying simulation results in curve forms for each loss function
 
-    # 1. 돌아와서 여기에 plot 최종 결과 그래프 출력하는 method 추가.
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+        """
 
-    # 2. 여기에 plot 최종 결과 그래프 출력하는 method (custom_labels 입력으로 받고 크기 조절하는)
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
 
-    # 3. 최종 학습 결과 list를 입력으로 받아서 평균내는 method
+        fig, ax = plt.subplots(figsize=(10, 6))
 
-    # 4. 평균낸 결과를 파일로 저장하는 method (이게 있어야 RL simulation 결과를 함께 plot 가능)
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            ax.plot(
+                by_loss_df['Number of replace failures'],
+                by_loss_df['Average usage time'],
+                '+-',
+                label=f'Loss function {i + 1}',
+                color=colors[i],
+                alpha=0.5
+            )
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Number of Failures vs. Average usage time ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            ax.set_ylim(150, 190)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 2:
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3:
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4:
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Number of replace failures')
+        ax.set_ylabel('Average usage time')
+        ax.legend()
+
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        ax.set_aspect('equal')   # Set aspect ratio to make the plot square
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_simulation_results_scale_up(self, by_loss_dfs, dataset_number, loss_labels):
+        """ Displaying simulation results in curve forms for each loss function
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            ax.plot(
+                by_loss_df['Number of replace failures'],
+                by_loss_df['Average usage time'],
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Number of Failures vs. Average usage time ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            ax.set_ylim(176, 189)
+            ax.set_xlim(-0.5, 60)
+        elif dataset_number == 2: # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3: # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4: # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Number of replace failures')
+        ax.set_ylabel('Average usage time')
+        ax.legend()
+
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+
+    def calculate_average_performance(self, by_loss_dfs_list, number_of_samples):
+        """ A method that takes results for multiple samples as input,
+            calculates the average for each loss function, and returns the final list.
+
+        Args:
+            by_loss_dfs_list (list) : a list of dataframes for each sample.
+
+        :return:
+            by_loss_func_dfs (list) : a list of dataframes for each loss function.
+        """
+        result_dfs = []
+
+        for col_idx in range(6):  # 열 인덱스 0부터 5까지
+            sum_df = by_loss_dfs_list[0][col_idx].copy()
+
+            for sample_idx in range(1, number_of_samples):
+                sum_df += by_loss_dfs_list[sample_idx][col_idx]
+
+            result_df = sum_df / number_of_samples
+            result_dfs.append(result_df)
+
+        return result_dfs
+
+    # 5. 시간 남으면 run_cpu에서 code 모델별로 데이터 3개씩 분할해서 저장하는 코드들 method 하나로 통일해서 3개 반환값 가지도록 하기.
 
 
 
