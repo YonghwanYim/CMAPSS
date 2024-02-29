@@ -145,7 +145,6 @@ class RunCPU():
                                                     y_lr4_full, y_lr5_full, y_lr6_full)
 
         # plot online prediction
-        #self.env.plot_online_RUL_prediction(merged_valid_dfs)
         #self.env.plot_online_RUL_prediction(merged_full_dfs)
 
         # simulation by threshold
