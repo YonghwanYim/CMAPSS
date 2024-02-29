@@ -2,6 +2,9 @@
 import pandas as pd
 import numpy as np
 class Linear_Regression_TD() :
+  """
+  A class for finding the closed-form solution of a linear regression model using temporal difference loss.
+  """
   def __init__( self, alpha=0, lambda_ridge=0 ) :
     self.alpha = alpha
     self.lambda_ridge = lambda_ridge  # Ridge regression
