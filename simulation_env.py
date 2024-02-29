@@ -496,7 +496,25 @@ class SimulationEnvironment():
 
         return result_dfs
 
-    # 5. 시간 남으면 run_cpu에서 code 모델별로 데이터 3개씩 분할해서 저장하는 코드들 method 하나로 통일해서 3개 반환값 가지도록 하기.
+    def predict_and_save(model_instance, train_data, valid_data, full_data):
+        """ A method that returns the predictions for each dataset.
+
+        Args:
+            model_instance (instance) : instance of a prediction model.
+            train_data (dataframe) : train data.
+            valid_data (dataframe) : train data.
+            full_data (dataframe) : train + valid data.
+
+        :return:
+            train_predictions (dataframe)
+            valid_predictions (dataframe)
+            full_predictions (dataframe)
+        """
+        train_predictions = model_instance.predict(train_data)
+        valid_predictions = model_instance.predict(valid_data)
+        full_predictions = model_instance.predict(full_data)
+
+        return train_predictions, valid_predictions, full_predictions
 
 
 
