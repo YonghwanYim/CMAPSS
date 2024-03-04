@@ -36,15 +36,26 @@ class RLParams:
         self.observation_probability = float(config['SimulationSettings']['observation_probability'])
 
 class Environment:
-    def __init__(self, config_path):
+    def __init__(self, config_path, observation_probability):
         config.read(config_path)
         simul_env = SimulationEnvironment()
         self.dataset_number = int(config['SimulationSettings']['num_dataset'])
+        self.num_sample_datasets = int(config['SimulationSettings']['num_sample_datasets'])
+        self.split_unit_number = int(config['SimulationSettings']['split_unit_number'])
+        self.observation_probability = float(config['SimulationSettings']['observation_probability'])
         dataset_path = simul_env.dataset_paths[self.dataset_number]
-        self.train_data, self.valid_data, self.full_data = self.simul_env.load_data(self.num_dataset, self.split_unit_number)
-        self.data = simul_env.add_RUL_column(self.data)
+        self.train_data, self.valid_data, self.full_data = simul_env.load_data(self.dataset_number, self.split_unit_number)
+        self.sampled_datasets = simul_env.sampling_datasets(self.num_sample_datasets, observation_probability,
+                                                            self.train_data, self.valid_data, self.full_data)
+        # sampling
+        self.sampled_datasets = simul_env.sampling_datasets(self.num_sample_datasets, self.observation_probability,
+                                                           self.train_data, self.valid_data, self.full_data)
+        # sampled_datasets에 RUL column 추가.
+        self.sampled_datasets_with_RUL = simul_env.add_RUL_column_to_sampled_datasets(self.sampled_datasets)
+        self.data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
 
 
+"""
 class Rewards:
     def __init__(self, r_continue=0, r_continue_but_failure=-10000, r_replace=-1000, config_path):
         config.read(config_path)
@@ -89,3 +100,4 @@ if __name__ == "__main__":
     # Example usage
     train_data = ...  # Your training data
 
+"""
