@@ -84,22 +84,14 @@ class SimulationEnvironment():
 
         return sampled_data_with_RUL_list
 
-    def add_RUL_column_to_datasets(self, datasets):
+    def add_RUL_column_to_datasets(self, dataset): # for Reinforcement Learning (only full data)
         # 새로운 샘플링 결과를 저장할 리스트 초기화
-        data_with_RUL = datasets
+        data_with_RUL = []
+        for sampled_full in dataset:
+            data_with_RUL = self.add_RUL_column(sampled_full)
 
+        return data_with_RUL
 
-
-        # 각각의 샘플링 데이터셋에 RUL 열 추가
-        for sampled_train, sampled_valid, sampled_full in sampled_datasets:
-            sampled_train_with_RUL = self.add_RUL_column(sampled_train)
-            sampled_valid_with_RUL = self.add_RUL_column(sampled_valid)
-            sampled_full_with_RUL = self.add_RUL_column(sampled_full)
-
-            # 결과를 리스트에 추가
-            sampled_data_with_RUL_list.append((sampled_train_with_RUL, sampled_valid_with_RUL, sampled_full_with_RUL))
-
-        return sampled_data_with_RUL_list
 
     def drop_labels_from_train_data(self, train_data): # for train data
         train_dataset_index_names = train_data[['unit_number', 'time_cycles']]   # save index name (for scaling)
