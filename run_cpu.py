@@ -12,6 +12,8 @@ import warnings
 from linear_regression_TD import Linear_Regression_TD
 from simulation_env import SimulationEnvironment
 from loss import directed_mse_loss
+from loss import different_td_loss
+from loss import previous_prediction, previous_true_label  # use global variable
 
 # Filter out the warning
 warnings.filterwarnings("ignore", message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated.*")
@@ -40,6 +42,9 @@ class RunCPU():
         self.crucial_moment = int(config['SimulationSettings']['crucial_moment'])
         self.td_crucial_moment = int(config['SimulationSettings']['td_crucial_moment'])
         self.directed_crucial_moment = int(config['SimulationSettings']['directed_crucial_moment'])
+
+        self.td_alpha = float(config['SimulationSettings']['td_alpha'])
+
 
         # constant of simulation
         self.threshold_start = int(config['SimulationSettings']['threshold_start'])
@@ -97,6 +102,29 @@ class RunCPU():
         lr3 = Linear_Regression_TD()
         lr3.fit(x_train, y_train, 0.5, 10)  # Fitting; fit(X, Y, alpha, lambda)
         y_lr3_train, y_lr3_valid, y_lr3_full = self.env.predict_and_save(lr3, x_train, x_valid, x_full)
+
+        """
+        y_train_float = y_train.astype(np.float32)  # penalty를 활용할 때 data type을 맞춰주기 위함.
+        lr3 = models.Sequential([
+            layers.Input(shape=(x_train.shape[1],)),
+            layers.Dense(1)   # fully connected layer -> 1 (number of output node)
+        ])
+
+        lr3.compile(optimizer='adam', loss=lambda y_true, y_pred: different_td_loss(y_true, y_pred, self.td_alpha))
+        # fit
+        lr3.fit(x_train, y_train_float, epochs=2500, verbose=0)  # fitting (verbose=2 -> print loss / epoch)
+        
+        for i in range(len(x_train)):
+            x = x_train[i:i + 1]
+            y = y_train_float[i:i + 1]
+            lr3.train_on_batch(x, y)
+
+            # 이전 예측값과 이전 실제 값 업데이트
+            previous_prediction = lr3.predict(x)
+            previous_true_label = y
+
+        y_lr3_train, y_lr3_valid, y_lr3_full = self.env.predict_and_save(lr3, x_train, x_valid, x_full)
+        """
 
         # 4. TD + Crucial moments loss function - Linear Regression (ridge) ##############
         filtered_data = x_train[y_train <= self.td_crucial_moment]
