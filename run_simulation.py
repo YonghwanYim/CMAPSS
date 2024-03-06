@@ -25,7 +25,7 @@ config = configparser.ConfigParser()
 full_by_loss_dfs_list = []
 average_by_loss_dfs = []
 
-class RunCPU():
+class RunSimulation():
     def __init__(self, config_path):
         config.read(config_path)
         # number of dataset (1, 2, 3, 4)
@@ -206,7 +206,7 @@ class RunCPU():
 
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
 
-runCPU = RunCPU('config1.ini')
+runCPU = RunSimulation('config1.ini')
 runCPU.run_many()
 
 """
