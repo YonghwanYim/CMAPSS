@@ -115,6 +115,17 @@ class SimulationEnvironment():
 
         return scaled_data
 
+    def min_max_scaling(self, column):
+        # for reinforcement learning environment.
+        min_value = column.min()
+        max_value = column.max()
+        scaled_column = (column - min_value) / (max_value - min_value)
+
+        # NaN -> 0
+        scaled_column = scaled_column.fillna(0)
+
+        return scaled_column
+
     def merge_dataframe(self, index_names, y_labels, df1, df2, df3, df4, df5, df6):
         y_lr_dfs = [pd.DataFrame(df1, columns=['predicted RUL']),
                     pd.DataFrame(df2, columns=['predicted RUL']),
@@ -504,6 +515,7 @@ class SimulationEnvironment():
             result_dfs.append(result_df)
 
         return result_dfs
+
 
     def predict_and_save(self, model_instance, train_data, valid_data, full_data):
         """ A method that returns the predictions for each dataset.
