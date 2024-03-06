@@ -34,8 +34,8 @@ class Agent:
     def __init__(self, actions=["continue", "replace"]):
         self.actions = actions
         # Linear Function Approximation (value-based)
-        self.weights = {action: np.random.normal(loc=0, scale=0.5, size=22) for action in actions}
-        self.best_weights = {action: np.random.normal(loc=0, scale=0.5, size=22) for action in actions} # for save best weight
+        self.weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions}
+        self.best_weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions} # for save best weight
 
     # 여기에 choose action과 update epsilon, update q_function을 포함시킬지 고민.
     # 또한 지금 왼쪽 화면에 띄워둔 ipynb의 코드를 어느 파일에 구현하는게 좋을지 고민해보자.
@@ -60,27 +60,10 @@ class Rewards:
         self.r_replace = -(r_replace)                             # cost (+) -> reward (-)
 
     def get_reward(self, current_index, next_index, action, environment):
-        current_unit_number = environment.data['unit_number'].iloc[current_index]
-        next_unit_number = environment.data['unit_number'].iloc[next_index]
+        current_unit_number = environment['unit_number'].iloc[current_index]
+        next_unit_number = environment['unit_number'].iloc[next_index]
 
         if action == 'continue':
             return self.r_continue if current_unit_number == next_unit_number else self.r_continue_but_failure
         elif action == 'replace':
             return self.r_replace
-"""
-class RLUtilities:
-    def __init__(self, environment, agent, rewards):
-        self.environment = environment
-        self.agent = agent
-        self.rewards = rewards
-
-    def state_min_index(self, current_index):
-        current_unit_number = self.environment.data['unit_number'].iloc[current_index]
-        return self.environment.data[self.environment.data['unit_number'] == current_unit_number].index[0]
-
-
-if __name__ == "__main__":
-    # Example usage
-    train_data = ...  # Your training data
-
-"""
