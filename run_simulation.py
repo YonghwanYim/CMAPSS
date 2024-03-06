@@ -7,7 +7,8 @@ from tensorflow.keras import layers, models
 import numpy as np
 import pickle        # it is suitable for saving Python objects.
 import warnings
-import copy
+from copy import copy
+import random
 
 # Custom .py
 from linear_regression_TD import Linear_Regression_TD
@@ -85,7 +86,6 @@ class RunSimulation():
         # class instance 생성
         self.env = SimulationEnvironment()
         self.agent = Agent()     # RL
-        self.reward = Rewards()  # RL
 
         # dataset 분할
         self.train_data, self.valid_data, self.full_data = self.env.load_data(self.num_dataset, self.split_unit_number)
@@ -95,31 +95,104 @@ class RunSimulation():
         # sampled_datasets에 RUL column 추가.
         self.sampled_datasets_with_RUL = self.env.add_RUL_column_to_sampled_datasets(self.sampled_datasets)
 
-    def train_RL(self, data_sample_index):  # 한번의 episode에 해당됨.
+    def train_RL(self, data_sample_index, epsilon):  # 한번의 episode에 해당됨.
         replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
         state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
         total_reward = 0
         num_of_step = 0
         loss_episode = 0
-        number_of_observation = 0
+        #number_of_observation = 0
 
         train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
         #full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()  # full_data는 테스트용이므로 여기선 필요 없음. 나중에 따로 구현
 
         train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
         #full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
 
+        train_data.reset_index(drop=True, inplace=True) # index reset. (리셋하지 않으면 state 전이가 되지 않음)
+
         RL_env = Environment(train_data)
+        reward = Rewards(self.CONTINUE_COST, self.FAILURE_COST, self.REPLACE_COST)
 
+        for unit_num in range(RL_env.max_unit_number):  # unit num : 0, .... , (max_unit_number - 1)
+            state = RL_env.states.iloc[state_index].values
 
+            # random stopping time을 위한 조건 분기 (exploration)
+            if np.random.rand() < epsilon:
+                t_replace = random.randint(self.min_t_replace, self.max_t_replace)  # 하나의 unit에 대해서만 t_replace를 뽑음.
+                while (state_index < RL_env.environment[RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[-1] + 1) \
+                       and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
+                    current_state = state
+                    chosen_action = 'continue' if state_index < RL_env.stateMinIndex(state_index) + t_replace else 'replace'
 
+                    next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
+                    next_state = RL_env.states.iloc[next_state_index].values
 
+                    current_reward = reward.get_reward(state_index, next_state_index, chosen_action, RL_env.environment)
 
+                    # count 'replace failure'
+                    if current_reward == (reward.r_continue_but_failure):
+                        replace_failure += 1
+
+                    # next action
+                    next_chosen_action = 'continue' if next_state_index < RL_env.stateMinIndex(next_state_index) + t_replace else 'replace'
+
+                    # update q-value (Linear Function Approximation)
+                    next_state_q = np.dot(self.agent.weights[next_chosen_action], next_state)   # A' ~ random generated episode
+                    current_state_q = np.dot(self.agent.weights[chosen_action], current_state)  # A  ~ random generated episode
+
+                    # TD target, weight
+                    TD_target = current_reward + self.gamma * next_state_q
+                    delta_w = self.alpha * (TD_target - current_state_q) * current_state
+
+                    self.agent.weights[chosen_action] = self.agent.weights[chosen_action] + delta_w
+
+                    # 총 리워드 업데이트
+                    total_reward += current_reward
+                    loss_episode += TD_target - current_state_q
+
+                    # 다음 상태로 이동
+                    state_index = next_state_index
+                    state = RL_env.states.iloc[state_index].values
+                    num_of_step += 1
+
+            # random episode가 아닌 경우, greedy action 수행.
+            else:
+                while (state_index <
+                       RL_env.environment[RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[
+                           -1] + 1) and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
+                    current_state = state
+                    chosen_action = max(self.agent.actions, key=lambda a: np.dot(self.agent.weights[a], current_state))  # greedy action
+                    next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
+                    next_state = RL_env.states.iloc[next_state_index].values
+                    current_reward = reward.get_reward(state_index, next_state_index, chosen_action, RL_env.environment)
+
+                    # count 'replace failure'
+                    if current_reward == (reward.r_continue_but_failure):
+                        replace_failure += 1
+
+                    # update q-value (Linear Function Approximation)
+                    next_state_q = max([np.dot(self.agent.weights[a], next_state) for a in self.agent.actions])  # A' ~ greedy action
+                    current_state_q = np.dot(self.agent.weights[chosen_action], current_state)  # A  ~ greedy action
+
+                    TD_target = current_reward + self.gamma * next_state_q
+                    delta_w = self.alpha * (TD_target - current_state_q) * current_state
+
+                    self.agent.weights[chosen_action] = self.agent.weights[chosen_action] + delta_w
+
+                    total_reward += current_reward
+                    loss_episode += TD_target - current_state_q
+
+                    # 다음 상태로 이동
+                    state_index = next_state_index
+                    state = RL_env.states.iloc[state_index].values
+                    num_of_step += 1
 
 
         # episode 학습 결과 출력
         average_reward = total_reward / num_of_step
-        average_number_of_observation = number_of_observation / RL_env.max_unit_number
+        #average_number_of_observation = number_of_observation / RL_env.max_unit_number
 
         # best weight 저장
         if average_reward > self.best_average_reward:
@@ -128,27 +201,36 @@ class RunSimulation():
 
         average_rewards.append(average_reward)
         training_loss.append(np.abs(loss_episode))
-        average_number_of_observations.append(average_number_of_observation)
+        #average_number_of_observations.append(average_number_of_observation)
         print(
             f"episode : {data_sample_index + 1}, replace failure : {replace_failure}, Average Reward : {average_reward}, "
-            f"loss : {np.abs(loss_episode)}, Average NoObs : {average_number_of_observation}")
+            f"loss : {np.abs(loss_episode)}")
+        """
+        print(
+            f"episode : {data_sample_index + 1}, replace failure : {replace_failure}, Average Reward : {average_reward}, "
+            f"loss : {np.abs(loss_episode)}, Average NoObs : {average_number_of_observation}") """
 
 
     def train_many_RL(self):
         # Iterate over the number of sample datasets
         for episode in range(self.max_episodes):
+            # decay epsilon (linear)
+            epsilon = max(self.min_epsilon, self.initial_epsilon - episode * self.epsilon_delta)
              # sample data의 수는 max_episodes와 다르니 반복문을 이중으로 구성.
              # episode마다 데이터를 샘플링하지 않고 이렇게 한 이유는, linear regression simulation 환경과 다르면 안되기 때문.
             for i in range(self.num_sample_datasets):
-                self.train_RL(i)
-                print(f"episode : {episode + 1} out of {self.num_sample_datasets}")
+                self.train_RL(i, epsilon)
+                #print(f"episode : {episode + 1} out of {self.num_sample_datasets}")
                 episode += 1
+                if i == (self.max_episodes - 1):
+                    print("train end.")
+                    break
 
         # 여기부터 수정해야함. 학습된 weight을 피클로 저장. loss, reward, observation plot 출력
 
         # Save average_by_loss_dfs to a file using pickle
-        with open('average_by_loss_dfs.pkl', 'wb') as f:
-            pickle.dump(average_by_loss_dfs, f)
+        #with open('average_by_loss_dfs.pkl', 'wb') as f:
+        #    pickle.dump(average_by_loss_dfs, f)
 
 
 
@@ -328,8 +410,10 @@ with open('average_by_loss_dfs.pkl', 'rb') as f:
 
 
 # test code
-run_sim.generate_RL_environment(0)
-run_sim.generate_RL_environment(4)
+#run_sim.generate_RL_environment(0)
+#run_sim.generate_RL_environment(4)
+
+run_sim.train_many_RL()
 
 # environment = Environment(train_data)
 # agent = Agent()
