@@ -9,7 +9,7 @@ class Agent:
         self.min_epsilon = min_epsilon
 
     def choose_action(self, state):
-        # epsilon-greedy 정책에 따라 행동을 선택합니다.
+        # epsilon-greedy policy에 따라 행동 선택
         if np.random.rand() < self.epsilon:
             return self.policy.get_random_action()
         else:
