@@ -7,6 +7,7 @@ from tensorflow.keras import layers, models
 import numpy as np
 import pickle        # it is suitable for saving Python objects.
 import warnings
+import copy
 
 # Custom .py
 from linear_regression_TD import Linear_Regression_TD
@@ -14,6 +15,9 @@ from simulation_env import SimulationEnvironment
 from loss import directed_mse_loss
 from loss import different_td_loss
 from loss import previous_prediction, previous_true_label  # use global variable
+from RL_component import Environment
+from RL_component import Rewards
+from RL_component import Agent
 
 # Filter out the warning
 warnings.filterwarnings("ignore", message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated.*")
@@ -24,6 +28,11 @@ config = configparser.ConfigParser()
 # a list to store dataframes containing simulation results for each sample
 full_by_loss_dfs_list = []
 average_by_loss_dfs = []
+
+# For reinforcement learning
+average_rewards = []
+training_loss = []
+average_number_of_observations = []  # 엔진당 평균 관측 횟수를 저장.
 
 class RunSimulation():
     def __init__(self, config_path):
@@ -43,8 +52,8 @@ class RunSimulation():
         self.td_crucial_moment = int(config['SimulationSettings']['td_crucial_moment'])
         self.directed_crucial_moment = int(config['SimulationSettings']['directed_crucial_moment'])
 
+        # Learning rate for different td loss() (loss.py)
         self.td_alpha = float(config['SimulationSettings']['td_alpha'])
-
 
         # constant of simulation
         self.threshold_start = int(config['SimulationSettings']['threshold_start'])
@@ -54,9 +63,30 @@ class RunSimulation():
         # Define cost
         self.REPLACE_COST = int(config['SimulationSettings']['REPLACE_COST'])
         self.FAILURE_COST = int(config['SimulationSettings']['FAILURE_COST'])
+        self.CONTINUE_COST = int(config['SimulationSettings']['CONTINUE_COST'])
+
+        # Hyperparameter for reinforcement learning
+        self.gamma = float(config['RL_Settings']['discount_factor'])
+        self.alpha = float(config['RL_Settings']['learning_rate'])
+        self.initial_epsilon = float(config['RL_Settings']['initial_epsilon'])
+        self.epsilon_delta = float(config['RL_Settings']['epsilon_delta'])
+        self.min_epsilon = float(config['RL_Settings']['min_epsilon'])
+        self.max_episodes = int(config['RL_Settings']['max_episodes'])
+
+        # RL
+        self.columns_to_scale = ['s_1', 's_2', 's_3', 's_4', 's_5', 's_6', 's_7', 's_8', 's_9', 's_10', 's_11', 's_12',
+                            's_13', 's_14', 's_15', 's_16', 's_17', 's_18', 's_19', 's_20', 's_21']
+        self.best_average_reward = -10000   # 처음에만 이렇게 초기화하고, 그 다음에는 알아서 반영.
+
+        # 사전에 정의된 stopping time에 따른 exploration을 위한 parameter
+        self.min_t_replace = int(config['StoppingTime']['min_t_replace'])
+        self.max_t_replace = int(config['StoppingTime']['max_t_replace']) # 10%의 데이터만 있다는 것을 감안해서 원래 값보다 1/10 수준으로 유지
 
         # class instance 생성
         self.env = SimulationEnvironment()
+        self.agent = Agent()     # RL
+        self.reward = Rewards()  # RL
+
         # dataset 분할
         self.train_data, self.valid_data, self.full_data = self.env.load_data(self.num_dataset, self.split_unit_number)
         # sampling
@@ -64,6 +94,72 @@ class RunSimulation():
                                                       self.train_data, self.valid_data, self.full_data)
         # sampled_datasets에 RUL column 추가.
         self.sampled_datasets_with_RUL = self.env.add_RUL_column_to_sampled_datasets(self.sampled_datasets)
+
+    def train_RL(self, data_sample_index):  # 한번의 episode에 해당됨.
+        replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
+        state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
+        total_reward = 0
+        num_of_step = 0
+        loss_episode = 0
+        number_of_observation = 0
+
+        train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
+        #full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()  # full_data는 테스트용이므로 여기선 필요 없음. 나중에 따로 구현
+
+        train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+        #full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        RL_env = Environment(train_data)
+
+
+
+
+
+
+
+        # episode 학습 결과 출력
+        average_reward = total_reward / num_of_step
+        average_number_of_observation = number_of_observation / RL_env.max_unit_number
+
+        # best weight 저장
+        if average_reward > self.best_average_reward:
+            self.best_average_reward = copy(average_reward)
+            self.agent.save_best_weights(self.agent.get_weights())  # 이 method를 그대로 활용하려면 위에서 weight을 agent에 save 해뒀어야함.
+
+        average_rewards.append(average_reward)
+        training_loss.append(np.abs(loss_episode))
+        average_number_of_observations.append(average_number_of_observation)
+        print(
+            f"episode : {data_sample_index + 1}, replace failure : {replace_failure}, Average Reward : {average_reward}, "
+            f"loss : {np.abs(loss_episode)}, Average NoObs : {average_number_of_observation}")
+
+
+    def train_many_RL(self):
+        # Iterate over the number of sample datasets
+        for episode in range(self.max_episodes):
+             # sample data의 수는 max_episodes와 다르니 반복문을 이중으로 구성.
+             # episode마다 데이터를 샘플링하지 않고 이렇게 한 이유는, linear regression simulation 환경과 다르면 안되기 때문.
+            for i in range(self.num_sample_datasets):
+                self.train_RL(i)
+                print(f"episode : {episode + 1} out of {self.num_sample_datasets}")
+                episode += 1
+
+        # 여기부터 수정해야함. 학습된 weight을 피클로 저장. loss, reward, observation plot 출력
+
+        # Save average_by_loss_dfs to a file using pickle
+        with open('average_by_loss_dfs.pkl', 'wb') as f:
+            pickle.dump(average_by_loss_dfs, f)
+
+
+
+    def run_RL_simulation(self):
+        print("test")
+        # 이 method는 학습이 완료된 bestweight을 불러와서 테스트 환경에서 실행.
+        # 아마도 continue의 reward에 따른 다양한 RL 학습 결과를 테스트 환경에서 실행 후 하나의 plot에 점을 찍어내야 함.
+        # 점을 찍을 때, continue의 reward가 무엇이었는지 같이 표시해주면 좋음. reward에 따른 성능을 볼 수 있도록.
+        # plot의 베이스가 되는 average_by_loss_dfs의 피클을 불러와서 다시 플롯을 그려야 함.
+
+
 
     def run_lr_simulation(self, data_sample_index):
         # Data preprocessing 1 : separate train, valid, full datasets.
@@ -82,7 +178,7 @@ class RunSimulation():
         x_full = self.env.data_scaler(x_full)
 
         # Data preprocessing 4 : Clipping y_train to have 195 as the maximum value (it means y = 197 -> y = 195)
-        y_train = y_train.clip(upper = 195)
+        #y_train = y_train.clip(upper = 195)
 
         # 1. Original Linear Regression #################################################
         lr1 = LinearRegression()
@@ -206,8 +302,41 @@ class RunSimulation():
 
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
 
-runCPU = RunSimulation('config1.ini')
-runCPU.run_many()
+
+
+
+# instance
+run_sim = RunSimulation('config1.ini')
+
+"""
+Linear Regression Simulation
+"""
+#run_sim.run_many()
+
+
+
+"""
+Reinforcement Learning (value-based)
+"""
+
+# Load average_by_loss_dfs from the file (read mode)
+with open('average_by_loss_dfs.pkl', 'rb') as f:
+    average_by_loss_dfs = pickle.load(f)
+
+#print(average_by_loss_dfs)
+# 이 데이터를 가지고 plot을 그리는 method는 따로 만들어야함.
+
+
+# test code
+run_sim.generate_RL_environment(0)
+run_sim.generate_RL_environment(4)
+
+# environment = Environment(train_data)
+# agent = Agent()
+# rewards = Rewards()
+# rl_utils = RLUtilities(environment, agent, rewards)
+
+
 
 """
    * Later, you can load the file to retrieve the data.
