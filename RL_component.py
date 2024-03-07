@@ -55,7 +55,7 @@ class Agent:
 
 class Rewards:
     def __init__(self, r_continue, r_continue_but_failure, r_replace):
-        self.r_continue = r_continue
+        self.r_continue = -r_continue                             # cost (+) -> reward (-)
         self.r_continue_but_failure = -(r_continue_but_failure)   # cost (+) -> reward (-)
         self.r_replace = -(r_replace)                             # cost (+) -> reward (-)
 
