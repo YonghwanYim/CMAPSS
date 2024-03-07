@@ -530,6 +530,7 @@ class SimulationEnvironment():
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
             ax.set_ylim(176, 189)
+            #ax.set_ylim(85, 95)
             ax.set_xlim(-0.5, 60)
         elif dataset_number == 2: # Tentative value
             ax.set_ylim(135, 220)
