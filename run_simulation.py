@@ -33,7 +33,11 @@ average_by_loss_dfs = []
 # For reinforcement learning
 average_rewards = []
 training_loss = []
-average_number_of_observations = []  # 엔진당 평균 관측 횟수를 저장.
+
+test_average_rewards = []      # for average performance.
+test_average_usage_times = []
+test_replace_failures = []
+
 
 class RunSimulation():
     def __init__(self, config_path):
@@ -95,13 +99,12 @@ class RunSimulation():
         # sampled_datasets에 RUL column 추가.
         self.sampled_datasets_with_RUL = self.env.add_RUL_column_to_sampled_datasets(self.sampled_datasets)
 
-    def train_RL(self, data_sample_index, epsilon):  # 한번의 episode에 해당됨.
+    def train_RL(self, data_sample_index, epsilon, episode):  # 한번의 episode에 해당됨.
         replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
         state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
         total_reward = 0
         num_of_step = 0
         loss_episode = 0
-        #number_of_observation = 0
 
         train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
         #full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()  # full_data는 테스트용이므로 여기선 필요 없음. 나중에 따로 구현
@@ -203,7 +206,7 @@ class RunSimulation():
         training_loss.append(np.abs(loss_episode))
         #average_number_of_observations.append(average_number_of_observation)
         print(
-            f"episode : {data_sample_index + 1}, replace failure : {replace_failure}, Average Reward : {average_reward}, "
+            f"episode : {episode + 1}, replace failure : {replace_failure}, Average Reward : {average_reward}, "
             f"loss : {np.abs(loss_episode)}")
         """
         print(
@@ -213,25 +216,90 @@ class RunSimulation():
 
     def train_many_RL(self):
         # Iterate over the number of sample datasets
+        escape_const = 0
         for episode in range(self.max_episodes):
-            # decay epsilon (linear)
-            epsilon = max(self.min_epsilon, self.initial_epsilon - episode * self.epsilon_delta)
-             # sample data의 수는 max_episodes와 다르니 반복문을 이중으로 구성.
-             # episode마다 데이터를 샘플링하지 않고 이렇게 한 이유는, linear regression simulation 환경과 다르면 안되기 때문.
+            # Iterate over the number of sample datasets
             for i in range(self.num_sample_datasets):
-                self.train_RL(i, epsilon)
-                #print(f"episode : {episode + 1} out of {self.num_sample_datasets}")
-                episode += 1
-                if i == (self.max_episodes - 1):
-                    print("train end.")
+                # decay epsilon (linear)
+                epsilon = max(self.min_epsilon, self.initial_epsilon - escape_const * self.epsilon_delta)
+                self.train_RL(i, epsilon, escape_const)
+                escape_const += 1
+                if escape_const == (self.max_episodes):
                     break
+            if escape_const == (self.max_episodes):
+                break
+        # 지금 상황은 (max_episodes - num_sample_datasets) * num_sample_datasets만큼 추가로 학습이 진행됨. (episode가 하나씩 밀리며)
+        # self.agent.get_best_weights() 이걸 이용해서 best weights을 저장하자.
+
+        self.env.plot_average_reward(self.max_episodes, average_rewards)
+        self.env.plot_training_loss(self.max_episodes, training_loss)
+        #self.env.plot_number_of_observation(self.max_episodes, average_number_of_observations)
+
 
         # 여기부터 수정해야함. 학습된 weight을 피클로 저장. loss, reward, observation plot 출력
 
-        # Save average_by_loss_dfs to a file using pickle
-        #with open('average_by_loss_dfs.pkl', 'wb') as f:
-        #    pickle.dump(average_by_loss_dfs, f)
+        # Save RL_best_weights to a file using pickle
+        with open('RL_best_weights.pkl', 'wb') as f:
+            pickle.dump(self.agent.get_best_weights(), f)
 
+    def test_RL(self, data_sample_index):
+        replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
+        state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
+        total_reward = 0
+        num_of_step = 0
+        loss_episode = 0
+        total_operation_time = 0
+
+        full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
+        full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+        full_data.reset_index(drop=True, inplace=True) # index reset. (리셋하지 않으면 state 전이가 되지 않음)
+
+        RL_env = Environment(full_data)
+        reward = Rewards(self.CONTINUE_COST, self.FAILURE_COST, self.REPLACE_COST)
+
+        for unit_num in range(RL_env.max_unit_number):  # unit num : 0, .... , (max_unit_number - 1)
+            state = RL_env.states.iloc[state_index].values
+
+            while (state_index <
+                   RL_env.environment[
+                       RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[
+                       -1] + 1) and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
+                current_state = state
+                chosen_action = max(self.agent.actions,
+                                    key=lambda a: np.dot(self.agent.best_weights[a], current_state))  # greedy action
+                next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
+                next_state = RL_env.states.iloc[next_state_index].values
+                current_reward = reward.get_reward(state_index, next_state_index, chosen_action, RL_env.environment)
+
+                if chosen_action == 'replace':
+                    print('replace')
+                    print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
+
+                # count 'replace failure'
+                if current_reward == (reward.r_continue_but_failure):
+                    print('continue but failure')
+                    print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
+                    replace_failure += 1
+
+                # update total reward.
+                total_reward += current_reward
+
+                # move next state.
+                state_index = next_state_index
+                state = RL_env.states.iloc[state_index].values
+                num_of_step += 1
+
+        average_reward = total_reward / num_of_step
+        average_usage_time = total_operation_time / (RL_env.environment['unit_number'].max() - 2)
+        print(
+            f"Number of Engine : {RL_env.environment['unit_number'].max() - 2}, Average Reward : {average_reward},"
+            f" replace failure : {replace_failure}, average usage time : {average_usage_time}")
+
+        test_average_rewards.append(average_reward)
+        test_average_usage_times.append(average_usage_time)
+        test_replace_failures.append(replace_failure)
 
 
     def run_RL_simulation(self):
@@ -240,6 +308,18 @@ class RunSimulation():
         # 아마도 continue의 reward에 따른 다양한 RL 학습 결과를 테스트 환경에서 실행 후 하나의 plot에 점을 찍어내야 함.
         # 점을 찍을 때, continue의 reward가 무엇이었는지 같이 표시해주면 좋음. reward에 따른 성능을 볼 수 있도록.
         # plot의 베이스가 되는 average_by_loss_dfs의 피클을 불러와서 다시 플롯을 그려야 함.
+        # Load average_by_loss_dfs from the file
+        with open('average_by_loss_dfs.pkl', 'rb') as f:
+            average_by_loss_dfs = pickle.load(f)
+        self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
+        with open('RL_best_weights.pkl', 'rb') as f:
+            self.agent.best_weights = pickle.load(f)
+
+        self.test_RL(0)  # tempo
+
+
+        print(self.agent.best_weights)
+
 
 
 
@@ -393,7 +473,7 @@ run_sim = RunSimulation('config1.ini')
 """
 Linear Regression Simulation
 """
-#run_sim.run_many()
+run_sim.run_many()
 
 
 
@@ -401,9 +481,6 @@ Linear Regression Simulation
 Reinforcement Learning (value-based)
 """
 
-# Load average_by_loss_dfs from the file (read mode)
-with open('average_by_loss_dfs.pkl', 'rb') as f:
-    average_by_loss_dfs = pickle.load(f)
 
 #print(average_by_loss_dfs)
 # 이 데이터를 가지고 plot을 그리는 method는 따로 만들어야함.
@@ -413,12 +490,9 @@ with open('average_by_loss_dfs.pkl', 'rb') as f:
 #run_sim.generate_RL_environment(0)
 #run_sim.generate_RL_environment(4)
 
-run_sim.train_many_RL()
-
-# environment = Environment(train_data)
-# agent = Agent()
-# rewards = Rewards()
-# rl_utils = RLUtilities(environment, agent, rewards)
+#run_sim.train_many_RL()
+# run_RL_simulation()은 ML, RL을 학습시킬 필요 없이 pickle을 불러와서 plot을 그릴 수 있음.
+# run_sim.run_RL_simulation()
 
 
 
