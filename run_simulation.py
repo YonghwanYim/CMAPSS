@@ -236,7 +236,7 @@ class RunSimulation():
         #self.env.plot_number_of_observation(self.max_episodes, average_number_of_observations)
 
         # Save RL_best_weights to a file using pickle
-        with open('RL_best_weights.pkl', 'wb') as f:
+        with open('RL_best_weights_continue_0.pkl', 'wb') as f:
             pickle.dump(self.agent.get_best_weights(), f)
 
     def test_RL(self, data_sample_index):
@@ -308,7 +308,7 @@ class RunSimulation():
         with open('average_by_loss_dfs.pkl', 'rb') as f:
             average_by_loss_dfs = pickle.load(f)
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
-        with open('RL_best_weights.pkl', 'rb') as f:
+        with open('RL_best_weights_continue_0.pkl', 'rb') as f:
             self.agent.best_weights = pickle.load(f)
 
         for i in range(self.num_sample_datasets):
@@ -324,8 +324,6 @@ class RunSimulation():
 
         self.env.plot_RL_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels,
                                           test_replace_failure, test_average_usage_time, self.CONTINUE_COST)
-
-        #여기에 이거 num_sample로 나눈 평균 값 저장해서 이걸 기존의 plot 위에 찍어주자.
 
 
     def run_lr_simulation(self, data_sample_index):
@@ -473,22 +471,31 @@ class RunSimulation():
 
 
 # instance
-run_sim = RunSimulation('config1.ini')
-
+#run_sim = RunSimulation('config1.ini')
 """
 Linear Regression Simulation
 """
 #run_sim.run_many()
 
 
-
 """
 Reinforcement Learning (value-based)
 """
 #run_sim.train_many_RL()
-# run_RL_simulation()은 ML, RL을 학습시킬 필요 없이 pickle을 불러와서 plot을 그릴 수 있음.
-run_sim.run_RL_simulation()
+#run_sim.run_RL_simulation()
 
+"""
+run_sim_2 = RunSimulation('config2.ini')
+run_sim_2.train_many_RL()
+run_sim_2.run_RL_simulation()
+
+run_sim_3 = RunSimulation('config3.ini')
+run_sim_3.train_many_RL()
+run_sim_3.run_RL_simulation()
+"""
+run_sim_4 = RunSimulation('config4.ini')
+run_sim_4.train_many_RL()
+run_sim_4.run_RL_simulation()
 
 
 
