@@ -537,8 +537,28 @@ class SimulationEnvironment():
 
         return train_predictions, valid_predictions, full_predictions
 
+    def plot_average_reward(self, max_episodes, average_rewards):
+        # Reinforcement Learning
+        plt.plot(range(1, max_episodes + 1), average_rewards)
+        plt.xlabel('Episode')
+        plt.ylabel('Average Reward')
+        plt.title('Average Reward per Episode')
+        plt.show()
 
+    def plot_training_loss(self, max_episodes, training_loss):
+        # Reinforcement Learning
+        plt.plot(range(1, max_episodes + 1), training_loss)
+        plt.xlabel('Episode')
+        plt.ylabel('loss')
+        plt.title('Loss per Episode')
+        plt.show()
 
+    def plot_number_of_observation(self, max_episodes, average_number_of_observations):
+        plt.plot(range(1, max_episodes + 1), average_number_of_observations)
+        plt.xlabel('Episode')
+        plt.ylabel('Average Number of Observations')
+        plt.title('Average Number of Observations per Episode')
+        plt.show()
 
 
 
