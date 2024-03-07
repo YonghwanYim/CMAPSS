@@ -493,6 +493,64 @@ class SimulationEnvironment():
         plt.tight_layout()
         plt.show()
 
+    def plot_RL_results_scale_up(self, by_loss_dfs, dataset_number, loss_labels, number_of_failure, average_usage_time, r_continue):
+        """ Displaying simulation results in curve forms for each loss function
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            ax.plot(
+                by_loss_df['Number of replace failures'],
+                by_loss_df['Average usage time'],
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+        print("Number of failures:", number_of_failure)
+        print("Average usage time:", average_usage_time)
+
+        # Plot additional points for number_of_failure and average_usage_time
+        ax.scatter(number_of_failure, average_usage_time, color='black', label=r_continue)
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Number of Failures vs. Average usage time ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            ax.set_ylim(176, 189)
+            ax.set_xlim(-0.5, 60)
+        elif dataset_number == 2: # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3: # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4: # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Number of replace failures')
+        ax.set_ylabel('Average usage time')
+        ax.legend()
+
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+
     def calculate_average_performance(self, by_loss_dfs_list, number_of_samples):
         """ A method that takes results for multiple samples as input,
             calculates the average for each loss function, and returns the final list.

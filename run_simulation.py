@@ -235,19 +235,16 @@ class RunSimulation():
         self.env.plot_training_loss(self.max_episodes, training_loss)
         #self.env.plot_number_of_observation(self.max_episodes, average_number_of_observations)
 
-
-        # 여기부터 수정해야함. 학습된 weight을 피클로 저장. loss, reward, observation plot 출력
-
         # Save RL_best_weights to a file using pickle
         with open('RL_best_weights.pkl', 'wb') as f:
             pickle.dump(self.agent.get_best_weights(), f)
 
     def test_RL(self, data_sample_index):
+        global test_average_rewards, test_average_usage_times, test_replace_failures
         replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
-        state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
+        state_index = 0      # state index -> index pointer로 취급하자. (episode 마다 초기화)
         total_reward = 0
         num_of_step = 0
-        loss_episode = 0
         total_operation_time = 0
 
         full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
@@ -272,14 +269,14 @@ class RunSimulation():
                 current_reward = reward.get_reward(state_index, next_state_index, chosen_action, RL_env.environment)
 
                 if chosen_action == 'replace':
-                    print('replace')
-                    print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    #print('replace')
+                    #print(RL_env.environment.iloc[state_index]['time_cycles'])
                     total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
 
                 # count 'replace failure'
                 if current_reward == (reward.r_continue_but_failure):
-                    print('continue but failure')
-                    print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    #print('continue but failure')
+                    #print(RL_env.environment.iloc[state_index]['time_cycles'])
                     total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
                     replace_failure += 1
 
@@ -303,11 +300,10 @@ class RunSimulation():
 
 
     def run_RL_simulation(self):
-        print("test")
+        global test_average_rewards, test_average_usage_times, test_replace_failures
         # 이 method는 학습이 완료된 bestweight을 불러와서 테스트 환경에서 실행.
         # 아마도 continue의 reward에 따른 다양한 RL 학습 결과를 테스트 환경에서 실행 후 하나의 plot에 점을 찍어내야 함.
         # 점을 찍을 때, continue의 reward가 무엇이었는지 같이 표시해주면 좋음. reward에 따른 성능을 볼 수 있도록.
-        # plot의 베이스가 되는 average_by_loss_dfs의 피클을 불러와서 다시 플롯을 그려야 함.
         # Load average_by_loss_dfs from the file
         with open('average_by_loss_dfs.pkl', 'rb') as f:
             average_by_loss_dfs = pickle.load(f)
@@ -315,12 +311,21 @@ class RunSimulation():
         with open('RL_best_weights.pkl', 'rb') as f:
             self.agent.best_weights = pickle.load(f)
 
-        self.test_RL(0)  # tempo
+        for i in range(self.num_sample_datasets):
+            self.test_RL(i)
 
+        test_average_reward = sum(test_average_rewards) / self.num_sample_datasets
+        test_average_usage_time = sum(test_average_usage_times) / self.num_sample_datasets
+        test_replace_failure = sum(test_replace_failures) / self.num_sample_datasets
 
-        print(self.agent.best_weights)
+        print(
+            f" Test average reward : {test_average_reward},"
+            f" Test replace failure : {test_replace_failure}, Test average usage time : {test_average_usage_time}")
 
+        self.env.plot_RL_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels,
+                                          test_replace_failure, test_average_usage_time, self.CONTINUE_COST)
 
+        #여기에 이거 num_sample로 나눈 평균 값 저장해서 이걸 기존의 plot 위에 찍어주자.
 
 
     def run_lr_simulation(self, data_sample_index):
@@ -473,37 +478,19 @@ run_sim = RunSimulation('config1.ini')
 """
 Linear Regression Simulation
 """
-run_sim.run_many()
+#run_sim.run_many()
 
 
 
 """
 Reinforcement Learning (value-based)
 """
-
-
-#print(average_by_loss_dfs)
-# 이 데이터를 가지고 plot을 그리는 method는 따로 만들어야함.
-
-
-# test code
-#run_sim.generate_RL_environment(0)
-#run_sim.generate_RL_environment(4)
-
 #run_sim.train_many_RL()
 # run_RL_simulation()은 ML, RL을 학습시킬 필요 없이 pickle을 불러와서 plot을 그릴 수 있음.
-# run_sim.run_RL_simulation()
+run_sim.run_RL_simulation()
 
 
 
-"""
-   * Later, you can load the file to retrieve the data.
-
-# Load average_by_loss_dfs from the file
-with open('average_by_loss_dfs.pkl', 'rb') as f:
-    average_by_loss_dfs = pickle.load(f)
-
-"""
 
 
 
