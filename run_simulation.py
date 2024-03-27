@@ -213,7 +213,6 @@ class RunSimulation():
             f"episode : {data_sample_index + 1}, replace failure : {replace_failure}, Average Reward : {average_reward}, "
             f"loss : {np.abs(loss_episode)}, Average NoObs : {average_number_of_observation}") """
 
-
     def train_many_RL(self):
         # Iterate over the number of sample datasets
         escape_const = 0
@@ -269,14 +268,14 @@ class RunSimulation():
                 current_reward = reward.get_reward(state_index, next_state_index, chosen_action, RL_env.environment)
 
                 if chosen_action == 'replace':
-                    #print('replace')
-                    #print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    print('replace')
+                    print(RL_env.environment.iloc[state_index]['time_cycles'])
                     total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
 
                 # count 'replace failure'
                 if current_reward == (reward.r_continue_but_failure):
-                    #print('continue but failure')
-                    #print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    print('continue but failure')
+                    print(RL_env.environment.iloc[state_index]['time_cycles'])
                     total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
                     replace_failure += 1
 
@@ -297,7 +296,6 @@ class RunSimulation():
         test_average_rewards.append(average_reward)
         test_average_usage_times.append(average_usage_time)
         test_replace_failures.append(replace_failure)
-
 
     def run_RL_simulation(self):
         global test_average_rewards, test_average_usage_times, test_replace_failures
@@ -324,7 +322,6 @@ class RunSimulation():
 
         self.env.plot_RL_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels,
                                           test_replace_failure, test_average_usage_time, self.CONTINUE_COST)
-
 
     def run_lr_simulation(self, data_sample_index):
         # Data preprocessing 1 : separate train, valid, full datasets.
@@ -467,35 +464,57 @@ class RunSimulation():
 
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
 
+    def plot_results(self):
+        global test_average_rewards, test_average_usage_times, test_replace_failures
+        with open('average_by_loss_dfs.pkl', 'rb') as f:
+            average_by_loss_dfs = pickle.load(f)
+        self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
+        self.env.plot_simulation_results_x_y_swap(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100)
+        self.env.plot_simulation_results_x_y_swap_cost(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100,
+                                                       self.REPLACE_COST, self.FAILURE_COST)
+        self.env.plot_simulation_results_x_y_swap_cost_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100,
+                                                       self.REPLACE_COST, self.FAILURE_COST)
+        # AUT_Pi, P_failure는 위의 method에서 return하고 저장 후, 아래 method로 전달하자. 지금은 임시로 값을 직접 넣어둠.
+        self.env.plot_simulation_results_x_y_swap_point_lambda(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100, 155.85, 0.011)
 
 
 
-# instance
-#run_sim = RunSimulation('config1.ini')
+
+# run
+run_sim = RunSimulation('config1.ini')
 """
 Linear Regression Simulation
 """
 #run_sim.run_many()
+
+"""
+Plot
+"""
+run_sim.plot_results()
 
 
 """
 Reinforcement Learning (value-based)
 """
 #run_sim.train_many_RL()
+
 #run_sim.run_RL_simulation()
 
-"""
-run_sim_2 = RunSimulation('config2.ini')
-run_sim_2.train_many_RL()
-run_sim_2.run_RL_simulation()
+#run_sim_2 = RunSimulation('config2.ini')
+#run_sim_2.train_many_RL()
+#run_sim_2.run_RL_simulation()
 
-run_sim_3 = RunSimulation('config3.ini')
-run_sim_3.train_many_RL()
-run_sim_3.run_RL_simulation()
-"""
-run_sim_4 = RunSimulation('config4.ini')
-run_sim_4.train_many_RL()
-run_sim_4.run_RL_simulation()
+#run_sim_3 = RunSimulation('config3.ini')
+#run_sim_3.train_many_RL()
+#run_sim_3.run_RL_simulation()
+
+#run_sim_4 = RunSimulation('config4.ini')
+#run_sim_4.train_many_RL()
+#run_sim_4.run_RL_simulation()
+
+#run_sim_5 = RunSimulation('config5.ini')
+#run_sim_5.train_many_RL()
+#run_sim_5.run_RL_simulation()
 
 
 

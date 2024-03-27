@@ -493,6 +493,288 @@ class SimulationEnvironment():
         plt.tight_layout()
         plt.show()
 
+
+    def plot_simulation_results_x_y_swap(self, by_loss_dfs, dataset_number, loss_labels, max_engine):
+        """ Displaying simulation results in curve forms for each loss function (swap x, y axis)
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+            max_engine (int) : a number of engines
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            ax.plot(
+                by_loss_df['Average usage time'],
+                by_loss_df['Number of replace failures'] / max_engine, # Divide by 'max_engine' to get the failure rate
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Average usage time vs. Failure rate ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            #ax.set_xlim(176, 189)
+            ax.set_xlim(0, 200)
+            ax.set_ylim(0, 1)
+        elif dataset_number == 2: # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3: # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4: # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Average usage time')
+        ax.set_ylabel('Failure rate')
+        ax.legend()
+
+        #ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_simulation_results_x_y_swap_point_lambda(self, by_loss_dfs, dataset_number, loss_labels, max_engine, AUT_pi, failure_rate_pi):
+        """ Displaying simulation results in curve forms for each loss function (swap x, y axis)
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+            max_engine (int) : a number of engines.
+            AUT_pi (float) : average usage time of optimal point.
+            failure_rate_pi (float) : failure rate of optimal point.
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            ax.plot(
+                by_loss_df['Average usage time'],
+                by_loss_df['Number of replace failures'] / max_engine, # Divide by 'max_engine' to get the failure rate
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+
+        # Plot the point (AUT_pi, failure_rate_pi)
+        ax.plot(AUT_pi, failure_rate_pi, 'ro', label='optimal point')
+
+        # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
+        beta = failure_rate_pi / AUT_pi
+
+        # Plot line connecting origin and min point
+        x_vals = np.array([0, 200])
+        y_vals = beta * x_vals
+        ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
+
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Average usage time vs. Failure rate ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            #ax.set_xlim(0, 200)
+            #ax.set_ylim(0, 1)
+            ax.set_xlim(140, 170)
+            ax.set_ylim(0, 0.02)
+        elif dataset_number == 2: # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3: # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4: # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Average usage time')
+        ax.set_ylabel('Failure rate')
+        ax.legend()
+
+        #ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_simulation_results_x_y_swap_cost(self, by_loss_dfs, dataset_number, loss_labels, max_engine,
+                                              c_replace, c_failure):
+        """ Displaying simulation results in curve forms for each loss function (swap x, y axis)
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+            max_engine (int) : a number of engines
+            c_replace (int) : replacement cost
+            c_failure (int) : System failure cost
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            # Divide by 'max_engine' to get the failure rate
+            failure_rate = by_loss_df['Number of replace failures'] / max_engine
+            actual_cost = c_replace + failure_rate * (c_failure - c_replace)
+
+            ax.plot(
+                by_loss_df['Average usage time'],
+                actual_cost,
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Average usage time vs. Actual Cost ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            #ax.set_xlim(176, 189)
+            ax.set_xlim(0, 200)
+            #ax.set_ylim(0, 1)
+        elif dataset_number == 2: # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3: # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4: # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Average usage time')
+        ax.set_ylabel('Actual Cost')
+        ax.legend()
+
+        #ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+    def plot_simulation_results_x_y_swap_cost_scale_up(self, by_loss_dfs, dataset_number, loss_labels, max_engine,
+                                              c_replace, c_failure):
+        """ Displaying simulation results in curve forms for each loss function (swap x, y axis)
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+            max_engine (int) : a number of engines
+            c_replace (int) : replacement cost
+            c_failure (int) : System failure cost
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Initialize variables to store the minimum actual cost per usage time
+        min_actual_cost_per_usage_time = float('inf')
+        min_point = None
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            # Divide by 'max_engine' to get the failure rate
+            failure_rate = by_loss_df['Number of replace failures'] / max_engine
+            actual_cost = c_replace + failure_rate * (c_failure - c_replace)
+
+            ax.plot(
+                by_loss_df['Average usage time'],
+                actual_cost,
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+
+            # Calculate actual cost per usage time
+            actual_cost_per_usage_time = actual_cost / by_loss_df['Average usage time']
+
+            # Find the minimum actual cost per usage time
+            min_index = np.argmin(actual_cost_per_usage_time)
+            min_cost = actual_cost_per_usage_time[min_index]
+
+            if min_cost < min_actual_cost_per_usage_time:
+                min_actual_cost_per_usage_time = min_cost
+                min_point = (by_loss_df['Average usage time'].iloc[min_index], actual_cost.iloc[min_index])
+
+            # Plot the minimum point
+        if min_point:
+            ax.plot(min_point[0], min_point[1], 'ro', label='Minimum cost per time')
+
+            # Calculate slope of the line connecting the origin and the min point
+            slope = min_point[1] / min_point[0]
+
+            # Plot line connecting origin and min point
+            x_vals = np.array([0, 200])
+            #x_vals = np.linspace(0, min_point[0], 100)
+            y_vals = slope * x_vals
+            ax.plot(x_vals, y_vals, 'r--', label=f'Lambda: {slope:.2f}')
+
+            # Print coordinates of the min point and slope
+            min_text = f"({min_point[0]:.2f}, {min_point[1]:.2f})"
+            ax.text(min_point[0], min_point[1], min_text, verticalalignment='bottom', horizontalalignment='right')
+
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Average usage time vs. Actual Cost ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            ax.set_xlim(130, 180)
+            #ax.set_xlim(140, 170)
+            ax.set_ylim(0, 2000)
+        elif dataset_number == 2: # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3: # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4: # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Average usage time')
+        ax.set_ylabel('Actual Cost')
+        ax.legend()
+
+        #ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+
     def plot_RL_results_scale_up(self, by_loss_dfs, dataset_number, loss_labels, number_of_failure, average_usage_time, r_continue):
         """ Displaying simulation results in curve forms for each loss function
 
@@ -530,7 +812,7 @@ class SimulationEnvironment():
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
             ax.set_ylim(176, 189)
-            #ax.set_ylim(85, 95)
+            ax.set_ylim(85, 105)
             ax.set_xlim(-0.5, 60)
         elif dataset_number == 2: # Tentative value
             ax.set_ylim(135, 220)
@@ -596,6 +878,7 @@ class SimulationEnvironment():
 
         return train_predictions, valid_predictions, full_predictions
 
+    """
     def plot_average_reward(self, max_episodes, average_rewards):
         # Reinforcement Learning
         plt.plot(range(1, max_episodes + 1), average_rewards)
@@ -603,7 +886,17 @@ class SimulationEnvironment():
         plt.ylabel('Average Reward')
         plt.title('Average Reward per Episode')
         plt.show()
+    """
 
+    def plot_average_reward(self, max_episodes, average_rewards):
+        # Reinforcement Learning
+        averaged_rewards = [sum(average_rewards[i:i + 5]) / 5 for i in range(0, len(average_rewards), 5)]
+        plt.plot(range(1, len(averaged_rewards) + 1), averaged_rewards)
+        plt.xlabel('Episode')
+        plt.ylabel('Average Reward')
+        plt.title('Average Reward per Episode (Averaged every 5 episodes)')
+        plt.show()
+    """
     def plot_training_loss(self, max_episodes, training_loss):
         # Reinforcement Learning
         plt.plot(range(1, max_episodes + 1), training_loss)
@@ -611,6 +904,16 @@ class SimulationEnvironment():
         plt.ylabel('loss')
         plt.title('Loss per Episode')
         plt.show()
+    """
+    def plot_training_loss(self, max_episodes, training_loss):
+        # Reinforcement Learning
+        averaged_loss = [sum(training_loss[i:i + 5]) / 5 for i in range(0, len(training_loss), 5)]
+        plt.plot(range(1, len(averaged_loss) + 1), averaged_loss)
+        plt.xlabel('Episode')
+        plt.ylabel('Loss')
+        plt.title('Loss per Episode (Averaged every 5 episodes)')
+        plt.show()
+
 
     def plot_number_of_observation(self, max_episodes, average_number_of_observations):
         plt.plot(range(1, max_episodes + 1), average_number_of_observations)
