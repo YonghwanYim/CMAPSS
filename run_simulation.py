@@ -68,7 +68,7 @@ class RunSimulation():
         # Define cost
         self.REPLACE_COST = int(config['SimulationSettings']['REPLACE_COST'])
         self.FAILURE_COST = int(config['SimulationSettings']['FAILURE_COST'])
-        self.CONTINUE_COST = int(config['SimulationSettings']['CONTINUE_COST'])
+        self.CONTINUE_COST = float(config['SimulationSettings']['CONTINUE_COST'])
 
         # Hyperparameter for reinforcement learning
         self.gamma = float(config['RL_Settings']['discount_factor'])
@@ -500,24 +500,9 @@ Reinforcement Learning (value-based)
 
 #run_sim.run_RL_simulation()
 
+# 실험을 위해 config2의 cost를 임의로 수정해둠. cost로 받으면 안되고 원래는 reward로 바꿔둬야함.
+# cost를 그대로 두면 LR 실험의 cost 계산시에도 반영되므로 문제가 생김.
 #run_sim_2 = RunSimulation('config2.ini')
 #run_sim_2.train_many_RL()
 #run_sim_2.run_RL_simulation()
-
-#run_sim_3 = RunSimulation('config3.ini')
-#run_sim_3.train_many_RL()
-#run_sim_3.run_RL_simulation()
-
-#run_sim_4 = RunSimulation('config4.ini')
-#run_sim_4.train_many_RL()
-#run_sim_4.run_RL_simulation()
-
-#run_sim_5 = RunSimulation('config5.ini')
-#run_sim_5.train_many_RL()
-#run_sim_5.run_RL_simulation()
-
-
-
-
-
 

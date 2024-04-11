@@ -581,11 +581,12 @@ class SimulationEnvironment():
         ax.plot(AUT_pi, failure_rate_pi, 'ro', label='optimal point')
 
         # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
-        beta = failure_rate_pi / AUT_pi
+        #beta = failure_rate_pi / AUT_pi
+        beta = 0.00078352
 
         # Plot line connecting origin and min point
         x_vals = np.array([0, 200])
-        y_vals = beta * x_vals
+        y_vals = beta * x_vals - 0.11111111
         ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
 
 
@@ -597,8 +598,8 @@ class SimulationEnvironment():
         if dataset_number == 1:
             #ax.set_xlim(0, 200)
             #ax.set_ylim(0, 1)
-            ax.set_xlim(140, 170)
-            ax.set_ylim(0, 0.02)
+            ax.set_xlim(120, 170)
+            ax.set_ylim(0, 0.03)
         elif dataset_number == 2: # Tentative value
             ax.set_ylim(135, 220)
             ax.set_xlim(-5, 265)
