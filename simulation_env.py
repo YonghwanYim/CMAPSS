@@ -586,8 +586,9 @@ class SimulationEnvironment():
 
         # Plot line connecting origin and min point
         x_vals = np.array([0, 200])
-        y_vals = beta * x_vals - 0.11111111
+        y_vals = beta * x_vals - 0.11111159
         ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
+
 
 
         # Set labels and title based on dataset number
@@ -616,6 +617,103 @@ class SimulationEnvironment():
         ax.legend()
 
         #ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_simulation_results_x_y_swap_point_lambda_2(self, by_loss_dfs, dataset_number, loss_labels, max_engine,
+                                                      AUT_pi, failure_rate_pi):
+        """ Displaying simulation results in curve forms for each loss function (swap x, y axis)
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+            max_engine (int) : a number of engines.
+            AUT_pi (float) : average usage time of optimal point.
+            failure_rate_pi (float) : failure rate of optimal point.
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            ax.plot(
+                by_loss_df['Average usage time'],
+                by_loss_df['Number of replace failures'] / max_engine,  # Divide by 'max_engine' to get the failure rate
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+
+        # Plot the point (AUT_pi, failure_rate_pi)
+        x_values = [AUT_pi, 158]
+        y_values = [failure_rate_pi, 0.009]
+        labels = ['1', '2']
+        ax.plot(AUT_pi, failure_rate_pi, 'ro', label='optimal point')
+        ax.plot(158, 0.009, 'ro', label='1')
+        ax.plot(160, 0.0089, 'ro', label='2')
+
+        # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
+        # beta = failure_rate_pi / AUT_pi
+        beta = 0.00078352
+
+        # Plot line connecting origin and min point
+        x_vals = np.array([0, 200])
+        y_vals = beta * x_vals - 0.11111159
+        ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
+
+        # Plot line connecting origin and min point
+        x_vals_2 = np.array([0, 200])
+        y_vals_2 = beta * x_vals_2 - 0.11479616
+        ax.plot(x_vals_2, y_vals_2, 'r--', label=f'Beta: {beta:.8f}')
+
+        # Plot line connecting origin and min point
+        x_vals_3 = np.array([0, 200])
+        y_vals_3 = 0.0007602 * x_vals_3 - 0.1111116
+        ax.plot(x_vals_3, y_vals_3, 'g--', label=f'Beta: {0.0007602:.8f}')
+
+        x_vals_4 = np.array([0, 200])
+        y_vals_4 = 0.0007602 * x_vals_4 - 0.112732
+        ax.plot(x_vals_4, y_vals_4, 'g--', label=f'Beta: {0.0007602:.8f}')
+
+        x_vals_5 = np.array([0, 200])
+        y_vals_5 = 0.00075007 * x_vals_5 - 0.1111112
+        ax.plot(x_vals_5, y_vals_5, 'b--', label=f'Beta: {0.00075007:.8f}')
+
+
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Average usage time vs. Failure rate ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            # ax.set_xlim(0, 200)
+            # ax.set_ylim(0, 1)
+            #ax.set_xlim(120, 170)
+            ax.set_xlim(140, 170)
+            ax.set_ylim(0, 0.03)
+        elif dataset_number == 2:  # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3:  # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4:  # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Average usage time')
+        ax.set_ylabel('Failure rate')
+        ax.legend()
+
+        # ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
 
         plt.tight_layout()
         plt.show()
@@ -889,32 +987,31 @@ class SimulationEnvironment():
         plt.show()
     """
 
-    def plot_average_reward(self, max_episodes, average_rewards):
+    def plot_average_reward(self, max_episodes, number_of_sample, average_rewards):
         # Reinforcement Learning
-        averaged_rewards = [sum(average_rewards[i:i + 5]) / 5 for i in range(0, len(average_rewards), 5)]
+        averaged_rewards = [sum(average_rewards[i:i + number_of_sample]) / number_of_sample for i in range(0, len(average_rewards), number_of_sample)]
         plt.plot(range(1, len(averaged_rewards) + 1), averaged_rewards)
         plt.xlabel('Episode')
         plt.ylabel('Average Reward')
-        plt.title('Average Reward per Episode (Averaged every 5 episodes)')
+        plt.title('Average Reward per Episode (1 episode : all samples)')
         plt.show()
-    """
-    def plot_training_loss(self, max_episodes, training_loss):
+    def plot_actual_average_reward(self, max_episodes, number_of_sample, average_rewards):
         # Reinforcement Learning
-        plt.plot(range(1, max_episodes + 1), training_loss)
+        averaged_rewards = [sum(average_rewards[i:i + number_of_sample]) / number_of_sample for i in range(0, len(average_rewards), number_of_sample)]
+        plt.plot(range(1, len(averaged_rewards) + 1), averaged_rewards)
         plt.xlabel('Episode')
-        plt.ylabel('loss')
-        plt.title('Loss per Episode')
+        plt.ylabel('Actual Average Reward')
+        plt.title('Actual Average Reward per Episode (1 episode : all samples)')
         plt.show()
-    """
-    def plot_training_loss(self, max_episodes, training_loss):
+
+    def plot_training_loss(self, max_episodes, number_of_sample, training_loss):
         # Reinforcement Learning
-        averaged_loss = [sum(training_loss[i:i + 5]) / 5 for i in range(0, len(training_loss), 5)]
+        averaged_loss = [sum(training_loss[i:i + number_of_sample]) / number_of_sample for i in range(0, len(training_loss), number_of_sample)]
         plt.plot(range(1, len(averaged_loss) + 1), averaged_loss)
         plt.xlabel('Episode')
         plt.ylabel('Loss')
-        plt.title('Loss per Episode (Averaged every 5 episodes)')
+        plt.title('Loss per Episode (1 episode : all samples)')
         plt.show()
-
 
     def plot_number_of_observation(self, max_episodes, average_number_of_observations):
         plt.plot(range(1, max_episodes + 1), average_number_of_observations)
