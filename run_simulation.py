@@ -186,10 +186,11 @@ class RunSimulation():
         average_rewards.append(average_reward)
         average_actual_rewards.append(average_actual_reward)
         training_loss.append(np.abs(loss_episode))
-
+        """
         print(
             f"episode : {episode + 1}, replace failure : {replace_failure}, average reward : {average_reward}, "
-            f"loss : {np.abs(loss_episode)}, actual average reward : {average_actual_reward}") #
+            f"loss : {np.abs(loss_episode)}, actual average reward : {average_actual_reward}")
+            """
 
     def train_RL_new(self, data_sample_index, epsilon, episode): # method 호출 당, 전체 엔진에 대해 학습이 진행됨.
         replace_failure = 0
@@ -436,7 +437,7 @@ class RunSimulation():
 
             # Iterate over the number of sample datasets
             for i in range(self.num_sample_datasets):
-                self.train_RL_new(i, epsilon, episode)
+                self.train_RL_random_new(i, epsilon, episode)
 
         # self.agent.get_best_weights() 이걸 이용해서 best weights을 저장하자.
 
@@ -448,6 +449,31 @@ class RunSimulation():
         with open('RL_best_weights_continue_240425.pkl', 'wb') as f:
             pickle.dump(self.agent.get_best_weights(), f)
 
+    def train_many_by_saved_weights_off_policy_RL_new(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
+        # 사전에 학습된 weights으로 이어서 학습하기 위한 method.
+        with open('RL_best_weights_continue_240425.pkl', 'rb') as f:
+            self.agent.best_weights = pickle.load(f)
+
+        # Iterate over the number of sample datasets
+        for episode in range(self.max_episodes):
+            # decay epsilon (linear)
+            # print test
+            print(episode + 1)
+            epsilon = max(self.min_epsilon, self.initial_epsilon - episode * self.epsilon_delta)
+
+            # Iterate over the number of sample datasets
+            for i in range(self.num_sample_datasets):
+                self.train_RL_random_new(i, epsilon, episode)
+
+        # self.agent.get_best_weights() 이걸 이용해서 best weights을 저장하자.
+
+        self.env.plot_average_reward(self.max_episodes, self.num_sample_datasets, average_rewards)
+        self.env.plot_training_loss(self.max_episodes, self.num_sample_datasets, training_loss)
+        self.env.plot_actual_average_reward(self.max_episodes, self.num_sample_datasets, average_actual_rewards)
+
+        # Save RL_best_weights to a file using pickle
+        with open('RL_best_weights_continue_240425.pkl', 'wb') as f:
+            pickle.dump(self.agent.get_best_weights(), f)
     def train_many_by_saved_weights_RL_new(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
         # 사전에 학습된 weights으로 이어서 학습하기 위한 method.
         with open('RL_best_weights_continue_240425.pkl', 'rb') as f:
@@ -828,32 +854,32 @@ class RunSimulation():
 
 
 
-
-# run
+# generate instance
 run_sim = RunSimulation('config1.ini')
-"""
+#run_sim_1 = RunSimulation('config2.ini')
+""" ################################
 Linear Regression Simulation
 """
 #run_sim.run_many()
 
-"""
-Plot
-"""
+# Plot
 #run_sim.plot_results()
 
 
-"""
+
+""" #################################
 Reinforcement Learning (value-based)
 """
 # Weights를 처음 학습시킬때만 실행.
 run_sim.train_many_RL_new()
 
 # 학습된 weights를 바탕으로 이어서 학습하기 위한 method.
+#run_sim_1.train_many_by_saved_weights_off_policy_RL_new()
 #run_sim.train_many_by_saved_weights_RL_new()
 
 # 저장된 weights으로 전체 엔진에 대한 test 수행.
 run_sim.run_RL_simulation_new()
-
+#run_sim_1.run_RL_simulation_new()
 
 #run_sim_2 = RunSimulation('config2.ini')
 #run_sim_2.train_many_RL()
