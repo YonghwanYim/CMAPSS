@@ -227,11 +227,15 @@ class RunSimulation():
                     replace_failure += 1
 
                 # next action
-                next_chosen_action = 'continue'
+                #next_chosen_action = 'continue'
 
                 # update q-value (Linear Function Approximation)
-                next_state_q = np.dot(self.agent.weights[next_chosen_action],
-                                      next_state)        # A' ~ continue
+                # next state q는 max_q로 구하고, current action은 continue로 하면서 다른 정책을 사용하므로 off-policy
+                next_state_q = max([np.dot(self.agent.weights[a], next_state) for a in self.agent.actions])
+
+                #next_state_q = np.dot(self.agent.weights[next_chosen_action],
+                #                      next_state)        # A' ~ continue
+
                 current_state_q = np.dot(self.agent.weights[chosen_action],
                                          current_state)  # A  ~ random generated episode
 
@@ -240,13 +244,13 @@ class RunSimulation():
                 delta_w = self.alpha * (TD_target - current_state_q) * current_state  # current state -> gradient
 
                 # TD target, weight for replace
-                TD_target_replace = self.reward.get_reward(state_index, next_state_index, 'replace',
-                                                           RL_env.environment) + self.gamma * next_state_q
-                delta_w_replace = self.alpha * (TD_target_replace - np.dot(self.agent.weights['replace'], current_state))
+                #TD_target_replace = self.reward.get_reward(state_index, next_state_index, 'replace',
+                #                                           RL_env.environment) + self.gamma * next_state_q
+                #delta_w_replace = self.alpha * (TD_target_replace - np.dot(self.agent.weights['replace'], current_state))
 
                 # update weights
                 self.agent.save_weights(chosen_action, self.agent.weights[chosen_action] + delta_w)
-                self.agent.save_weights('replace', self.agent.weights['replace'] + delta_w_replace)
+                #self.agent.save_weights('replace', self.agent.weights['replace'] + delta_w_replace)
 
                 # 총 리워드 업데이트
                 total_reward += current_reward
@@ -923,7 +927,7 @@ class RunSimulation():
         average_by_loss_dfs = self.env.calculate_average_performance(full_by_loss_dfs_list, self.num_sample_datasets)
 
         # Save average_by_loss_dfs to a file using pickle
-        with open('average_by_loss_dfs.pkl', 'wb') as f:
+        with open('average_by_loss_dfs_03.pkl', 'wb') as f:
             pickle.dump(average_by_loss_dfs, f)
 
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
@@ -942,12 +946,13 @@ class RunSimulation():
 
 
 # generate instance
-#run_sim = RunSimulation('config1.ini')
-run_sim_1 = RunSimulation('config2.ini')
+run_sim = RunSimulation('config1.ini')
+#run_sim_1 = RunSimulation('config2.ini')
+#run_sim_1 = RunSimulation('config4.ini')
 """ ################################
 Linear Regression Simulation
 """
-#run_sim.run_many()
+run_sim.run_many()
 
 # Plot
 #run_sim.plot_results()
@@ -961,10 +966,10 @@ Reinforcement Learning (value-based)
 #run_sim.train_many_RL_new()
 
 # 학습된 weights를 바탕으로 이어서 학습하기 위한 method.
-run_sim_1.train_many_by_saved_weights_off_policy_RL_new()
+#run_sim_1.train_many_by_saved_weights_off_policy_RL_new()
 #run_sim.train_many_by_saved_weights_off_policy_RL_new()
 
 # 저장된 weights으로 전체 엔진에 대한 test 수행.
 #run_sim.run_RL_simulation_new()
-run_sim_1.run_RL_simulation_new()
+#run_sim_1.run_RL_simulation_new()
 
