@@ -527,7 +527,7 @@ class SimulationEnvironment():
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
             #ax.set_xlim(176, 189)
-            ax.set_xlim(0, 200)
+            ax.set_xlim(0, 205)
             ax.set_ylim(0, 1)
         elif dataset_number == 2: # Tentative value
             ax.set_ylim(135, 220)
@@ -651,20 +651,21 @@ class SimulationEnvironment():
             )
 
         # Plot the point (AUT_pi, failure_rate_pi)
-        x_values = [AUT_pi, 158]
-        y_values = [failure_rate_pi, 0.009]
-        labels = ['1', '2']
+        x_values = [AUT_pi, 204.185714, 178.395408, 159.3188]
+        y_values = [failure_rate_pi, 1, 0, 0]
+        labels = ['optimal point', 'beta 1', 'beta 2', 'beta 3']
         ax.plot(AUT_pi, failure_rate_pi, 'ro', label='optimal point')
-        ax.plot(158, 0.009, 'ro', label='1')
-        ax.plot(160, 0.0089, 'ro', label='2')
+        ax.plot(204.185714, 1, 'ro', label='beta 1')
+        ax.plot(178.395408, 0, 'ro', label='beta 2')
+        ax.plot(159.3188, 0, 'ro', label='beta 3')
 
         # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
         # beta = failure_rate_pi / AUT_pi
-        beta = 0.00078352
+        beta = 0.00000539
 
         # Plot line connecting origin and min point
-        x_vals = np.array([0, 200])
-        y_vals = beta * x_vals - 0.11111159
+        x_vals = np.array([0, 205])
+        y_vals = beta * x_vals - 0.002223
         ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
 
         # Plot line connecting origin and min point
@@ -696,8 +697,8 @@ class SimulationEnvironment():
             # ax.set_xlim(0, 200)
             # ax.set_ylim(0, 1)
             #ax.set_xlim(120, 170)
-            ax.set_xlim(140, 170)
-            ax.set_ylim(0, 0.03)
+            ax.set_xlim(170, 200)
+            ax.set_ylim(-0.01, 0.03)
         elif dataset_number == 2:  # Tentative value
             ax.set_ylim(135, 220)
             ax.set_xlim(-5, 265)
@@ -758,7 +759,7 @@ class SimulationEnvironment():
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
             #ax.set_xlim(176, 189)
-            ax.set_xlim(0, 200)
+            ax.set_xlim(0, 205)
             #ax.set_ylim(0, 1)
         elif dataset_number == 2: # Tentative value
             ax.set_ylim(135, 220)
@@ -851,7 +852,7 @@ class SimulationEnvironment():
 
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
-            ax.set_xlim(130, 180)
+            ax.set_xlim(160, 205)
             #ax.set_xlim(140, 170)
             ax.set_ylim(0, 2000)
         elif dataset_number == 2: # Tentative value
