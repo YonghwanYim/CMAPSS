@@ -67,7 +67,7 @@ class Rewards:
         self.r_actual_continue = r_actual_continue                # reward -> reward (부호 변경하지 않아도 됨)
         self.r_actual_failure = r_actual_failure
         self.r_actual_replace = r_actual_replace
-
+    """
     def get_reward(self, current_index, next_index, action, environment):
         current_unit_number = environment['unit_number'].iloc[current_index]
         next_unit_number = environment['unit_number'].iloc[next_index]
@@ -76,7 +76,35 @@ class Rewards:
             return self.r_continue if current_unit_number == next_unit_number else self.r_continue_but_failure
         elif action == 'replace':
             return self.r_replace
+    """
 
+    def get_reward(self, current_index, next_index, action, environment):
+        current_unit_number = environment['unit_number'].iloc[current_index]
+        next_unit_number = environment['unit_number'].iloc[next_index]
+
+        if action == 'continue':
+            if current_unit_number == next_unit_number:
+                time_difference = self.calculate_time_difference(current_index, next_index, environment)
+                return self.r_continue * time_difference
+            else:
+                return self.r_continue_but_failure
+        elif action == 'replace':
+            return self.r_replace
+
+    def get_actual_reward(self, current_index, next_index, action, environment):
+        current_unit_number = environment['unit_number'].iloc[current_index]
+        next_unit_number = environment['unit_number'].iloc[next_index]
+
+        if action == 'continue':
+            if current_unit_number == next_unit_number:
+                time_difference = self.calculate_time_difference(current_index, next_index, environment)
+                return self.r_actual_continue * time_difference
+            else:
+                return self.r_actual_failure
+        elif action == 'replace':
+            return self.r_actual_replace
+
+    """
     def get_actual_reward(self, current_index, next_index, action, environment):
         current_unit_number = environment['unit_number'].iloc[current_index]
         next_unit_number = environment['unit_number'].iloc[next_index]
@@ -85,3 +113,8 @@ class Rewards:
             return self.r_actual_continue if current_unit_number == next_unit_number else self.r_actual_failure
         elif action == 'replace':
             return self.r_actual_replace
+    """
+    def calculate_time_difference(self, current_index, next_index, environment):
+        current_time_cycles = environment['time_cycles'].iloc[current_index]
+        next_time_cycles = environment['time_cycles'].iloc[next_index]
+        return next_time_cycles - current_time_cycles
