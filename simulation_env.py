@@ -646,16 +646,6 @@ class SimulationEnvironment():
                 alpha=0.5
             )
 
-        """
-        # Plot the point (AUT_pi, failure_rate_pi)
-        x_values = [AUT_pi, 204.185714, 178.395408, 159.3188]
-        y_values = [failure_rate_pi, 1, 0, 0]
-        labels = ['optimal point', 'beta 1', 'beta 2', 'beta 3']
-        ax.plot(AUT_pi, failure_rate_pi, 'ro', label='optimal point')
-        ax.plot(204.185714, 1, 'ro', label='beta 1')
-        ax.plot(178.395408, 0, 'ro', label='beta 2')
-        ax.plot(159.3188, 0, 'ro', label='beta 3') """
-
         # Plot the points (AUT, failure_rate)
         points = [(130.766, 0.0025), (135.5835, 0.0035), (140.932, 0.0045), (145.784, 0.0065),
                   (147.6945, 0.007), (148.0725, 0.0075), (148.0859, 0.0075), (152.9085, 0.009),
