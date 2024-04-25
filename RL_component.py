@@ -38,9 +38,6 @@ class Agent:
         self.weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions}
         self.best_weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions} # for save best weight
 
-    # 여기에 choose action과 update epsilon, update q_function을 포함시킬지 고민.
-    # 또한 지금 왼쪽 화면에 띄워둔 ipynb의 코드를 어느 파일에 구현하는게 좋을지 고민해보자.
-
     def get_weights(self):
         return self.weights
 
@@ -67,16 +64,6 @@ class Rewards:
         self.r_actual_continue = r_actual_continue                # reward -> reward (부호 변경하지 않아도 됨)
         self.r_actual_failure = r_actual_failure
         self.r_actual_replace = r_actual_replace
-    """
-    def get_reward(self, current_index, next_index, action, environment):
-        current_unit_number = environment['unit_number'].iloc[current_index]
-        next_unit_number = environment['unit_number'].iloc[next_index]
-
-        if action == 'continue':
-            return self.r_continue if current_unit_number == next_unit_number else self.r_continue_but_failure
-        elif action == 'replace':
-            return self.r_replace
-    """
 
     def get_reward(self, current_index, next_index, action, environment):
         current_unit_number = environment['unit_number'].iloc[current_index]
@@ -104,7 +91,21 @@ class Rewards:
         elif action == 'replace':
             return self.r_actual_replace
 
+    def calculate_time_difference(self, current_index, next_index, environment):
+        current_time_cycles = environment['time_cycles'].iloc[current_index]
+        next_time_cycles = environment['time_cycles'].iloc[next_index]
+        return next_time_cycles - current_time_cycles
+
     """
+    def get_reward(self, current_index, next_index, action, environment):
+        current_unit_number = environment['unit_number'].iloc[current_index]
+        next_unit_number = environment['unit_number'].iloc[next_index]
+
+        if action == 'continue':
+            return self.r_continue if current_unit_number == next_unit_number else self.r_continue_but_failure
+        elif action == 'replace':
+            return self.r_replace
+
     def get_actual_reward(self, current_index, next_index, action, environment):
         current_unit_number = environment['unit_number'].iloc[current_index]
         next_unit_number = environment['unit_number'].iloc[next_index]
@@ -114,7 +115,3 @@ class Rewards:
         elif action == 'replace':
             return self.r_actual_replace
     """
-    def calculate_time_difference(self, current_index, next_index, environment):
-        current_time_cycles = environment['time_cycles'].iloc[current_index]
-        next_time_cycles = environment['time_cycles'].iloc[next_index]
-        return next_time_cycles - current_time_cycles

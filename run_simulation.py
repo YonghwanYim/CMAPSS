@@ -106,91 +106,6 @@ class RunSimulation():
         # sampled_datasets에 RUL column 추가.
         self.sampled_datasets_with_RUL = self.env.add_RUL_column_to_sampled_datasets(self.sampled_datasets)
 
-    def train_RL_random_new(self, data_sample_index, epsilon, episode): # off-policy로 학습. 학습된 weight을 train에는 사용하지 않음.
-        replace_failure = 0
-        state_index = 0     # index를 가리키는 pointer로 사용 (episode 마다 초기화)
-        total_reward = 0
-        total_actual_reward = 0
-        num_of_step = 0
-        loss_episode = 0
-
-        train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
-        train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
-        train_data.reset_index(drop=True, inplace=True) # index reset (reset 하지 않으면 state 전이가 되지 않음)
-
-        RL_env = Environment(train_data)
-
-        for unit_num in range(RL_env.max_unit_number):      # unit num : 0, ... , (max_unit_number - 1)
-            state = RL_env.states.iloc[state_index].values
-
-            # random stopping time을 위한 조건 분기 (exploration)
-            t_replace = random.randint(self.min_t_replace, self.max_t_replace)  # 하나의 unit에 대해서만 t_replace를 뽑음.
-            while (state_index < RL_env.environment[
-                RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[-1] + 1) \
-                    and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
-                current_state = state
-                chosen_action = 'continue' if state_index < RL_env.stateMinIndex(
-                    state_index) + t_replace else 'replace'  # 미리 언제 replace를 할 지 정해둠 (epsilon greedy와 유사한 효과).
-
-                next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
-                next_state = RL_env.states.iloc[next_state_index].values
-
-                current_reward = self.reward.get_reward(state_index, next_state_index, chosen_action, RL_env.environment)
-
-                # count 'replace failure'
-                if current_reward == (self.reward.r_continue_but_failure):
-                    replace_failure += 1
-
-                # next action
-                next_chosen_action = 'continue' if next_state_index < RL_env.stateMinIndex(
-                    next_state_index) + t_replace else 'replace'
-
-                # update q-value (Linear Function Approximation)
-                next_state_q = np.dot(self.agent.weights[next_chosen_action],
-                                      next_state)        # A' ~ random generated episode
-                current_state_q = np.dot(self.agent.weights[chosen_action],
-                                         current_state)  # A  ~ random generated episode
-
-                # TD target, weight
-                TD_target = current_reward + self.gamma * next_state_q
-                delta_w = self.alpha * (TD_target - current_state_q) * current_state  # current state -> gradient
-
-                # update weights
-                #self.agent.weights[chosen_action] = self.agent.weights[chosen_action] + delta_w
-
-                # update weights
-                self.agent.save_weights(chosen_action, self.agent.weights[chosen_action] + delta_w)
-
-                # 총 리워드 업데이트
-                total_reward += current_reward
-                loss_episode += TD_target - current_state_q
-
-                # 원래 문제의 reward 저장 (출력용; 학습에 사용 x)
-                total_actual_reward += self.reward.get_actual_reward(state_index, next_state_index, chosen_action, RL_env.environment)
-
-
-                # 다음 상태로 이동
-                state_index = next_state_index
-                state = RL_env.states.iloc[state_index].values
-                num_of_step += 1
-
-        # episode 학습 결과 출력
-        average_reward = total_reward / num_of_step
-        average_actual_reward = total_actual_reward / num_of_step
-
-        # best weight 저장
-        if average_reward > self.best_average_reward:
-            self.best_average_reward = copy(average_reward)
-            self.agent.save_best_weights(self.agent.get_weights())
-
-        average_rewards.append(average_reward)
-        average_actual_rewards.append(average_actual_reward)
-        training_loss.append(np.abs(loss_episode))
-        """
-        print(
-            f"episode : {episode + 1}, replace failure : {replace_failure}, average reward : {average_reward}, "
-            f"loss : {np.abs(loss_episode)}, actual average reward : {average_actual_reward}")
-            """
 
     def train_RL_off_policy(self, data_sample_index, epsilon, episode):  # off-policy로 학습. 학습된 weight을 train에는 사용하지 않음.
         replace_failure = 0
@@ -199,9 +114,25 @@ class RunSimulation():
         total_actual_reward = 0
         num_of_step = 0
         loss_episode = 0
+        self.agent.save_weights('replace', np.zeros(21))  # set 0
 
         train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
         train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        # dummy row 추가 (마지막 row를 2번 복사해서 뒤에 추가)
+        dummy_row = train_data.iloc[-1].copy()
+        dummy_row['unit_number'] = int(dummy_row['unit_number']) + 1
+        dummy_row_2 = dummy_row.copy()
+        dummy_row_2['unit_number'] = int(dummy_row_2['unit_number']) + 1
+
+        train_data = train_data._append(dummy_row)
+        train_data = train_data._append(dummy_row_2)
+        # float으로 변환된 자료형을 다시 int로 변환
+        train_data['unit_number'] = train_data['unit_number'].astype(int)
+        train_data['time_cycles'] = train_data['time_cycles'].astype(int)
+        train_data['RUL'] = train_data['RUL'].astype(int)
+
+        #print(train_data)
         train_data.reset_index(drop=True, inplace=True)  # index reset (reset 하지 않으면 state 전이가 되지 않음)
 
         RL_env = Environment(train_data)
@@ -226,15 +157,10 @@ class RunSimulation():
                 if current_reward == (self.reward.r_continue_but_failure):
                     replace_failure += 1
 
-                # next action
-                #next_chosen_action = 'continue'
 
                 # update q-value (Linear Function Approximation)
-                # next state q는 max_q로 구하고, current action은 continue로 하면서 다른 정책을 사용하므로 off-policy
+                # next state q는 max_q로 구하고, current action은 continue.
                 next_state_q = max([np.dot(self.agent.weights[a], next_state) for a in self.agent.actions])
-
-                #next_state_q = np.dot(self.agent.weights[next_chosen_action],
-                #                      next_state)        # A' ~ continue
 
                 current_state_q = np.dot(self.agent.weights[chosen_action],
                                          current_state)  # A  ~ random generated episode
@@ -243,14 +169,8 @@ class RunSimulation():
                 TD_target = current_reward + self.gamma * next_state_q
                 delta_w = self.alpha * (TD_target - current_state_q) * current_state  # current state -> gradient
 
-                # TD target, weight for replace
-                #TD_target_replace = self.reward.get_reward(state_index, next_state_index, 'replace',
-                #                                           RL_env.environment) + self.gamma * next_state_q
-                #delta_w_replace = self.alpha * (TD_target_replace - np.dot(self.agent.weights['replace'], current_state))
-
                 # update weights
                 self.agent.save_weights(chosen_action, self.agent.weights[chosen_action] + delta_w)
-                #self.agent.save_weights('replace', self.agent.weights['replace'] + delta_w_replace)
 
                 # 총 리워드 업데이트
                 total_reward += current_reward
@@ -282,97 +202,6 @@ class RunSimulation():
             f"episode : {episode + 1}, replace failure : {replace_failure}, average reward : {average_reward}, "
             f"loss : {np.abs(loss_episode)}, actual average reward : {average_actual_reward}")
         """
-
-    def train_RL_off_policy_both(self, data_sample_index, epsilon, episode):  # off-policy로 학습. 학습된 weight을 train에는 사용하지 않음.
-        # replace action도 매 step마다 동시에 학습시키는 코드.
-        replace_failure = 0
-        state_index = 0  # index를 가리키는 pointer로 사용 (episode 마다 초기화)
-        total_reward = 0
-        total_actual_reward = 0
-        num_of_step = 0
-        loss_episode = 0
-
-        train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
-        train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
-        train_data.reset_index(drop=True, inplace=True)  # index reset (reset 하지 않으면 state 전이가 되지 않음)
-
-        RL_env = Environment(train_data)
-
-        for unit_num in range(RL_env.max_unit_number):  # unit num : 0, ... , (max_unit_number - 1)
-            state = RL_env.states.iloc[state_index].values
-
-            # 항상 continue action만 수행.
-            while (state_index < RL_env.environment[
-                RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[-1] + 1) \
-                    and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
-                current_state = state
-                chosen_action = 'continue'
-
-                next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
-                next_state = RL_env.states.iloc[next_state_index].values
-
-                current_reward = self.reward.get_reward(state_index, next_state_index, chosen_action,
-                                                        RL_env.environment)
-
-                # count 'replace failure'
-                if current_reward == (self.reward.r_continue_but_failure):
-                    replace_failure += 1
-
-                # next action
-                #next_chosen_action = 'continue'
-
-                # update q-value (Linear Function Approximation)
-                # next state q는 max_q로 구하고, current action은 continue로 하면서 다른 정책을 사용하므로 off-policy
-                next_state_q = max([np.dot(self.agent.weights[a], next_state) for a in self.agent.actions])
-
-                current_state_q = np.dot(self.agent.weights[chosen_action],
-                                         current_state)  # A  ~ random generated episode
-
-                # TD target, weight
-                TD_target = current_reward + self.gamma * next_state_q
-                delta_w = self.alpha * (TD_target - current_state_q) * current_state  # current state -> gradient
-
-                # TD target, weight for replace
-                TD_target_replace = self.reward.get_reward(state_index, next_state_index, 'replace',
-                                                           RL_env.environment) + self.gamma * next_state_q
-                delta_w_replace = self.alpha * (TD_target_replace - np.dot(self.agent.weights['replace'], current_state))
-
-                # update weights
-                self.agent.save_weights(chosen_action, self.agent.weights[chosen_action] + delta_w)
-                self.agent.save_weights('replace', self.agent.weights['replace'] + delta_w_replace)
-
-                # 총 리워드 업데이트
-                total_reward += current_reward
-                loss_episode += TD_target - current_state_q
-
-                # 원래 문제의 reward 저장 (출력용; 학습에 사용 x)
-                total_actual_reward += self.reward.get_actual_reward(state_index, next_state_index, chosen_action,
-                                                                     RL_env.environment)
-
-                # 다음 상태로 이동
-                state_index = next_state_index
-                state = RL_env.states.iloc[state_index].values
-                num_of_step += 1
-
-        # episode 학습 결과 출력
-        average_reward = total_reward / num_of_step
-        average_actual_reward = total_actual_reward / num_of_step
-
-        # best weight 저장
-        if average_reward > self.best_average_reward:
-            self.best_average_reward = copy(average_reward)
-            self.agent.save_best_weights(self.agent.get_weights())
-
-        average_rewards.append(average_reward)
-        average_actual_rewards.append(average_actual_reward)
-        training_loss.append(np.abs(loss_episode))
-        """
-        print(
-            f"episode : {episode + 1}, replace failure : {replace_failure}, average reward : {average_reward}, "
-            f"loss : {np.abs(loss_episode)}, actual average reward : {average_actual_reward}")
-        """
-
-
 
     def train_RL_new(self, data_sample_index, epsilon, episode): # method 호출 당, 전체 엔진에 대해 학습이 진행됨.
         replace_failure = 0
@@ -501,7 +330,6 @@ class RunSimulation():
             f"episode : {episode + 1}, replace failure : {replace_failure}, average reward : {average_reward}, "
             f"loss : {np.abs(loss_episode)}, actual average reward : {average_actual_reward}")
 
-
     def train_RL(self, data_sample_index, epsilon, episode):  # 한번의 episode에 해당됨.
         replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
         state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
@@ -609,7 +437,10 @@ class RunSimulation():
             f"episode : {episode + 1}, replace failure : {replace_failure}, Average Reward : {average_reward}, "
             f"loss : {np.abs(loss_episode)}")
 
-    def train_many_RL_new(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
+    def train_many_off_policy_RL(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
+        # Set Q_repalce = 0 (by definition)
+        self.agent.save_weights('replace', np.zeros(21))
+
         # Iterate over the number of sample datasets
         for episode in range(self.max_episodes):
             # decay epsilon (linear)
@@ -619,7 +450,7 @@ class RunSimulation():
 
             # Iterate over the number of sample datasets
             for i in range(self.num_sample_datasets):
-                self.train_RL_off_policy_both(i, epsilon, episode)
+                self.train_RL_off_policy(i, epsilon, episode)
 
         # self.agent.get_best_weights() 이걸 이용해서 best weights을 저장하자.
 
@@ -631,11 +462,14 @@ class RunSimulation():
         with open('RL_best_weights_continue_240425.pkl', 'wb') as f:
             pickle.dump(self.agent.get_best_weights(), f)
 
-    def train_many_by_saved_weights_off_policy_RL_new(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
+    def train_many_by_saved_weights_off_policy_RL(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
         # 사전에 학습된 weights으로 이어서 학습하기 위한 method.
         with open('RL_best_weights_continue_240425.pkl', 'rb') as f:
             self.agent.best_weights = pickle.load(f)
 
+        self.agent.weights = self.agent.best_weights
+        self.agent.save_weights('replace', np.zeros(21))
+
         # Iterate over the number of sample datasets
         for episode in range(self.max_episodes):
             # decay epsilon (linear)
@@ -645,7 +479,7 @@ class RunSimulation():
 
             # Iterate over the number of sample datasets
             for i in range(self.num_sample_datasets):
-                self.train_RL_off_policy_both(i, epsilon, episode)
+                self.train_RL_off_policy(i, epsilon, episode)
 
         # self.agent.get_best_weights() 이걸 이용해서 best weights을 저장하자.
 
@@ -656,7 +490,7 @@ class RunSimulation():
         # Save RL_best_weights to a file using pickle
         with open('RL_best_weights_continue_240425.pkl', 'wb') as f:
             pickle.dump(self.agent.get_best_weights(), f)
-    def train_many_by_saved_weights_RL_new(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
+    def train_many_by_saved_weights_RL(self): # 샘플 데이터셋 전체를 하나의 episode로 취급.
         # 사전에 학습된 weights으로 이어서 학습하기 위한 method.
         with open('RL_best_weights_continue_240425.pkl', 'rb') as f:
             self.agent.best_weights = pickle.load(f)
@@ -707,7 +541,7 @@ class RunSimulation():
         with open('RL_best_weights_continue_0.pkl', 'wb') as f:
             pickle.dump(self.agent.get_best_weights(), f)
 
-    def test_RL_new(self, data_sample_index):
+    def test_RL_random_observation(self, data_sample_index):
         global test_average_rewards, test_average_usage_times, test_replace_failures
         replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
         state_index = 0      # state index -> index pointer로 취급하자. (episode 마다 초기화)
@@ -718,6 +552,21 @@ class RunSimulation():
 
         full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
         full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        #### dummy row 추가 (마지막 row를 2번 복사해서 뒤에 추가) ##################
+        dummy_row = full_data.iloc[-1].copy()
+        dummy_row['unit_number'] = int(dummy_row['unit_number']) + 1
+        dummy_row_2 = dummy_row.copy()
+        dummy_row_2['unit_number'] = int(dummy_row_2['unit_number']) + 1
+
+        full_data = full_data._append(dummy_row)
+        full_data = full_data._append(dummy_row_2)
+        # float으로 변환된 자료형을 다시 int로 변환
+        full_data['unit_number'] = full_data['unit_number'].astype(int)
+        full_data['time_cycles'] = full_data['time_cycles'].astype(int)
+        full_data['RUL'] = full_data['RUL'].astype(int)
+        ####################################################################
+
         full_data.reset_index(drop=True, inplace=True) # index reset. (리셋하지 않으면 state 전이가 되지 않음)
 
         RL_env = Environment(full_data)
@@ -739,6 +588,7 @@ class RunSimulation():
                 if chosen_action == 'replace':
                     print('replace')
                     print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    #print(np.dot(self.agent.best_weights['replace'], current_state))
                     total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
 
                 # count 'replace failure'
@@ -760,11 +610,14 @@ class RunSimulation():
                 state = RL_env.states.iloc[state_index].values
                 num_of_step += 1
 
-        average_reward = total_reward / num_of_step
-        average_actual_reward = total_actual_reward / num_of_step
+        # average_reward = total_reward / num_of_step
+        # average_actual_reward = total_actual_reward / num_of_step
+        average_reward = total_reward / total_operation_time
+        average_actual_reward = total_actual_reward / total_operation_time
         average_usage_time = total_operation_time / (RL_env.environment['unit_number'].max() - 2)
         print(
-            f"number of engine : {RL_env.environment['unit_number'].max() - 2}, average actual Reward : {average_actual_reward},"
+            f"number of engine : {RL_env.environment['unit_number'].max() - 2}, average reward : {average_reward},"
+            f" actual average reward : {average_actual_reward},"
             f" replace failure : {replace_failure}, average usage time : {average_usage_time}")
 
         test_average_rewards.append(average_reward)
@@ -829,7 +682,7 @@ class RunSimulation():
         test_average_usage_times.append(average_usage_time)
         test_replace_failures.append(replace_failure)
 
-    def run_RL_simulation_new(self):
+    def run_RL_simulation(self):
         global test_average_rewards, test_average_usage_times, test_replace_failures
         # 이 method는 학습이 완료된 bestweight을 불러와서 테스트 환경에서 실행.
         # 아마도 continue의 reward에 따른 다양한 RL 학습 결과를 테스트 환경에서 실행 후 하나의 plot에 점을 찍어내야 함.
@@ -842,42 +695,23 @@ class RunSimulation():
             self.agent.best_weights = pickle.load(f)
 
         for i in range(self.num_sample_datasets):
-            self.test_RL_new(i)
+            self.test_RL_random_observation(i)
+
+        print(test_average_usage_times)
+        print(self.num_sample_datasets)
 
         test_average_reward = sum(test_average_rewards) / self.num_sample_datasets
         test_average_actual_reward = sum(test_average_actual_rewards) / self.num_sample_datasets
         test_average_usage_time = sum(test_average_usage_times) / self.num_sample_datasets
         test_replace_failure = sum(test_replace_failures) / self.num_sample_datasets
+        failure_probability = test_replace_failure / 100
+        lambda_policy = (-self.REWARD_ACTUAL_REPLACE + failure_probability * (-self.REWARD_ACTUAL_FAILURE + self.REWARD_ACTUAL_REPLACE)) / test_average_usage_time
+        beta_policy = lambda_policy / (-self.REWARD_ACTUAL_FAILURE + self.REWARD_ACTUAL_REPLACE)
+
 
         print(
-            f" Test actual average reward : {test_average_actual_reward},"
-            f" Test replace failure : {test_replace_failure}, Test average usage time : {test_average_usage_time}")
-
-        self.env.plot_RL_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels,
-                                          test_replace_failure, test_average_usage_time, self.CONTINUE_COST)
-
-    def run_RL_simulation(self):
-        global test_average_rewards, test_average_usage_times, test_replace_failures
-        # 이 method는 학습이 완료된 bestweight을 불러와서 테스트 환경에서 실행.
-        # 아마도 continue의 reward에 따른 다양한 RL 학습 결과를 테스트 환경에서 실행 후 하나의 plot에 점을 찍어내야 함.
-        # 점을 찍을 때, continue의 reward가 무엇이었는지 같이 표시해주면 좋음. reward에 따른 성능을 볼 수 있도록.
-        # Load average_by_loss_dfs from the file
-        with open('average_by_loss_dfs.pkl', 'rb') as f:
-            average_by_loss_dfs = pickle.load(f)
-        self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
-        with open('RL_best_weights_continue_0.pkl', 'rb') as f:
-            self.agent.best_weights = pickle.load(f)
-
-        for i in range(self.num_sample_datasets):
-            self.test_RL(i)
-
-        test_average_reward = sum(test_average_rewards) / self.num_sample_datasets
-        test_average_usage_time = sum(test_average_usage_times) / self.num_sample_datasets
-        test_replace_failure = sum(test_replace_failures) / self.num_sample_datasets
-
-        print(
-            f" Test average reward : {test_average_reward},"
-            f" Test replace failure : {test_replace_failure}, Test average usage time : {test_average_usage_time}")
+            f" Test average reward : {test_average_reward}, Test actual average reward : {test_average_actual_reward},"
+            f" Test replace failure : {test_replace_failure}, Test average usage time : {test_average_usage_time}, Failure probability : {failure_probability}, lambda : {lambda_policy}, beta : {beta_policy}")
 
         self.env.plot_RL_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels,
                                           test_replace_failure, test_average_usage_time, self.CONTINUE_COST)
@@ -1018,49 +852,44 @@ class RunSimulation():
         average_by_loss_dfs = self.env.calculate_average_performance(full_by_loss_dfs_list, self.num_sample_datasets)
 
         # Save average_by_loss_dfs to a file using pickle
-        with open('average_by_loss_dfs_03.pkl', 'wb') as f:
+        with open('average_by_loss_dfs.pkl', 'wb') as f:
             pickle.dump(average_by_loss_dfs, f)
 
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
 
     def plot_results(self):
         global test_average_rewards, test_average_usage_times, test_replace_failures
-        with open('average_by_loss_dfs_03.pkl', 'rb') as f:
+        with open('average_by_loss_dfs.pkl', 'rb') as f:
             average_by_loss_dfs = pickle.load(f)
         #self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
         self.env.plot_simulation_results_x_y_swap(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100)
         self.env.plot_simulation_results_x_y_swap_cost(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100, -self.REWARD_ACTUAL_REPLACE, -self.REWARD_ACTUAL_FAILURE)
         self.env.plot_simulation_results_x_y_swap_cost_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100, -self.REWARD_ACTUAL_REPLACE, -self.REWARD_ACTUAL_FAILURE)
         # AUT_Pi, P_failure는 위의 method에서 return하고 저장 후, 아래 method로 전달하자. 지금은 임시로 값을 직접 넣어둠.
-        self.env.plot_simulation_results_x_y_swap_point_lambda_2(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100, 185.57, 0.001)
+        self.env.plot_simulation_results_x_y_swap_point_lambda_2(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100)
 
 
 
-# generate instance
-run_sim = RunSimulation('config9.ini')
-#run_sim_1 = RunSimulation('config12.ini')
-#run_sim_1 = RunSimulation('config4.ini')
+"""generate instance"""
+run_sim = RunSimulation('config_009.ini')
+#run_sim_1 = RunSimulation('config_004.ini')
 """ ################################
 Linear Regression Simulation
 """
 #run_sim.run_many()
-
-# Plot
-#run_sim.plot_results()
-
+run_sim.plot_results()
 
 
 """ #################################
 Reinforcement Learning (value-based)
 """
 # Weights를 처음 학습시킬때만 실행.
-run_sim.train_many_RL_new()
+#run_sim.train_many_off_policy_RL()
 
 # 학습된 weights를 바탕으로 이어서 학습하기 위한 method.
-#run_sim_1.train_many_by_saved_weights_off_policy_RL_new()
-#run_sim.train_many_by_saved_weights_off_policy_RL_new()
+#run_sim_1.train_many_by_saved_weights_off_policy_RL()
+#run_sim.train_many_by_saved_weights_off_policy_RL()
 
 # 저장된 weights으로 전체 엔진에 대한 test 수행.
-run_sim.run_RL_simulation_new()
-#run_sim_1.run_RL_simulation_new()
-
+#run_sim.run_RL_simulation()
+#run_sim_1.run_RL_simulation()

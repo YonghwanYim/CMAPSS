@@ -621,17 +621,13 @@ class SimulationEnvironment():
         plt.tight_layout()
         plt.show()
 
-    def plot_simulation_results_x_y_swap_point_lambda_2(self, by_loss_dfs, dataset_number, loss_labels, max_engine,
-                                                      AUT_pi, failure_rate_pi):
+    def plot_simulation_results_x_y_swap_point_lambda_2(self, by_loss_dfs, dataset_number, loss_labels, max_engine):
         """ Displaying simulation results in curve forms for each loss function (swap x, y axis)
 
         Args:
             by_loss_dfs (list) : a list of dataframes for each threshold.
             dataset_number (int): the number of the dataset (1, 2, 3, or 4).
             loss_labels (list) : a list of labels for the loss.
-            max_engine (int) : a number of engines.
-            AUT_pi (float) : average usage time of optimal point.
-            failure_rate_pi (float) : failure rate of optimal point.
         """
 
         # Create a list of colors for each dataframe
@@ -650,6 +646,7 @@ class SimulationEnvironment():
                 alpha=0.5
             )
 
+        """
         # Plot the point (AUT_pi, failure_rate_pi)
         x_values = [AUT_pi, 204.185714, 178.395408, 159.3188]
         y_values = [failure_rate_pi, 1, 0, 0]
@@ -657,34 +654,38 @@ class SimulationEnvironment():
         ax.plot(AUT_pi, failure_rate_pi, 'ro', label='optimal point')
         ax.plot(204.185714, 1, 'ro', label='beta 1')
         ax.plot(178.395408, 0, 'ro', label='beta 2')
-        ax.plot(159.3188, 0, 'ro', label='beta 3')
+        ax.plot(159.3188, 0, 'ro', label='beta 3') """
+
+        # Plot the points (AUT, failure_rate)
+        points = [(130.766, 0.0025), (135.5835, 0.0035), (140.932, 0.0045), (145.784, 0.0065),
+                  (147.6945, 0.007), (148.0725, 0.0075), (148.0859, 0.0075), (152.9085, 0.009),
+                  (163.1935, 0.017), (171.082, 0.027), (177.3905, 0.045), (182.55249, 0.066),
+                  (186.954, 0.1015), (190.6155, 0.154), (193.219, 0.23), (195.3825, 0.3495),
+                  (196.7805, 0.3495), (197.3625, 1)]
+        labels = ['00086881', '00084531', '00082033', '00080674',
+                  '00079969', '00080103', '00080096', '00078550',
+                  '00078502', '00080728', '00088004', '00097019', '00113723', '00139081',
+                  '00176541', '00235748', '00347143', '00562979']
+        beta = [0.0008688123, 0.00084531754, 0.0008203325, 0.000806749,
+                0.00079969877, 0.00080103402, 0.000800961, 0.0007855097,
+                0.0007850258, 0.0008072801, 0.00088004, 0.0009701927, 0.00113723, 0.001390816,
+                0.0017654118, 0.002357483, 0.00347143701,  0.005629798, ]
+
+        for i, (point, label) in enumerate(zip(points, labels)):
+            ax.plot(point[0], point[1], marker='o', markersize=8, label=label, color='C{}'.format(i))
+
+        # Add legend
+        ax.legend()
 
         # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
-        # beta = failure_rate_pi / AUT_pi
-        beta = 0.00000539
+        beta = 0.000785025
 
         # Plot line connecting origin and min point
         x_vals = np.array([0, 205])
-        y_vals = beta * x_vals - 0.002223
+        y_vals = beta * x_vals - 0.11111016
         ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
 
-        # Plot line connecting origin and min point
-        x_vals_2 = np.array([0, 200])
-        y_vals_2 = beta * x_vals_2 - 0.11479616
-        ax.plot(x_vals_2, y_vals_2, 'r--', label=f'Beta: {beta:.8f}')
 
-        # Plot line connecting origin and min point
-        x_vals_3 = np.array([0, 200])
-        y_vals_3 = 0.0007602 * x_vals_3 - 0.1111116
-        ax.plot(x_vals_3, y_vals_3, 'g--', label=f'Beta: {0.0007602:.8f}')
-
-        x_vals_4 = np.array([0, 200])
-        y_vals_4 = 0.0007602 * x_vals_4 - 0.112732
-        ax.plot(x_vals_4, y_vals_4, 'g--', label=f'Beta: {0.0007602:.8f}')
-
-        x_vals_5 = np.array([0, 200])
-        y_vals_5 = 0.00075007 * x_vals_5 - 0.1111112
-        ax.plot(x_vals_5, y_vals_5, 'b--', label=f'Beta: {0.00075007:.8f}')
 
 
 
@@ -695,9 +696,9 @@ class SimulationEnvironment():
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
             # ax.set_xlim(0, 200)
-            # ax.set_ylim(0, 1)
+            #ax.set_ylim(0, 0.2)
             #ax.set_xlim(120, 170)
-            ax.set_xlim(170, 200)
+            ax.set_xlim(130, 170)
             ax.set_ylim(-0.01, 0.03)
         elif dataset_number == 2:  # Tentative value
             ax.set_ylim(135, 220)
