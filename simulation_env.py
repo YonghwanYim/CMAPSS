@@ -141,7 +141,7 @@ class SimulationEnvironment():
 
         return merged_dfs
 
-    def plot_online_RUL_prediction(self, merged_dfs):
+    def plot_online_RUL_prediction(self, merged_dfs): # 지금 코드 구조에서 바로 쓰지는 못함. 수정해서 써야함.
         for i, merged_df in enumerate(merged_dfs, start=1):
             # unit_number을 기준으로 그룹화
             grouped = merged_df.groupby('unit_number')
@@ -162,6 +162,42 @@ class SimulationEnvironment():
             plt.xlim(350, 0)  # reverse the x-axis so RUL counts down to zero
             plt.ylim(-50, 200)
             plt.show()
+
+    def plot_RUL_prediction_by_q_value(self, environment, weights_by_RL, scale):
+
+        # Calculate predicted RUL by multiplying 's_1' to 's_21' columns with weights_by_RL for all rows
+        predicted_RUL_by_Q = np.dot(environment.iloc[:, 5:26], weights_by_RL)
+
+        # Apply scale to predicted RUL values
+        predicted_RUL_by_Q *= scale
+
+        # Add a new column 'predicted_RUL_by_Q' to the environment DataFrame
+        environment['predicted_RUL_by_Q'] = predicted_RUL_by_Q
+
+        grouped = environment.groupby('unit_number')
+
+        # Set subplot
+        fig, ax = plt.subplots(figsize=(16, 9))
+
+        # Plot for each unit_number
+        for unit, group in grouped:
+            #ax.plot(group['RUL'], group['predicted_RUL_by_Q'], label=f'Unit {unit}')
+            ax.plot(group['RUL'], group['predicted_RUL_by_Q'])
+
+        # Draw a red dashed line at y=0
+        ax.axhline(y=0, color='r', linestyle='--', label='Q_replace')
+
+        ax.set_xlabel('Remaining Useful Life')
+        ax.set_ylabel('Predicted RUL (Q-value)')
+        ax.set_title('Predicted RUL by Unit Number - Q-value')
+        ax.legend(loc='upper right')  # Add legend
+
+        # Plot settings
+        plt.xlim(250, 0)  # Reverse the x-axis so RUL counts down to zero
+        #plt.ylim(-50, 200)
+        plt.show()
+
+
 
     def random_obs_simulation_by_threshold(self, merged_dfs, threshold_values, REPLACE_COST, FAILURE_COST):
         """ A method that takes dataframes for each loss function as input, simulates each threshold,
@@ -197,8 +233,9 @@ class SimulationEnvironment():
 
                 for unit, group in grouped:
                     operation_time = None
-                    max_RUL = group['RUL'].max()
-                    """
+                    # max_RUL = group['RUL'].max() # RUL으로 계산하면 초기 time_step이 0이 아닌 경우에 max_RUL이 낮게 측정되는 문제가 있음.
+                    max_RUL = group['time_cycles'].max()  # 'RUL'을 'time_cycles'로 바꿈.
+
                     for index, row in group.iterrows():
                         if row['predicted RUL'] <= threshold_value:
                             operation_time = row['time_cycles']
@@ -206,6 +243,7 @@ class SimulationEnvironment():
                             total_cost += REPLACE_COST
                             break
                     """
+                    # 이부분을 자세히 살펴보자. 여기서 문제가 생겼을 것임.
                     for index, row in group.iterrows():
                         if row['predicted RUL'] <= threshold_value:
                             if row['time_cycles'] > max_RUL:
@@ -215,7 +253,8 @@ class SimulationEnvironment():
                             cumulative_operation_time += operation_time
                             total_cost += REPLACE_COST
                             break
-
+                    """
+                    # When the operation time is None, it corresponds to the case of a replacement failure.
                     if pd.isna(operation_time):
                         cumulative_operation_time += max_RUL
                         total_cost += FAILURE_COST
@@ -416,7 +455,7 @@ class SimulationEnvironment():
 
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
-            ax.set_ylim(150, 190)
+            ax.set_ylim(0, 200)
             ax.set_xlim(-5, 105)
         elif dataset_number == 2:
             ax.set_ylim(135, 220)
@@ -589,8 +628,6 @@ class SimulationEnvironment():
         y_vals = beta * x_vals - 0.11111159
         ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
 
-
-
         # Set labels and title based on dataset number
         dataset_name = f"Dataset {dataset_number}"
         ax.set_title(f'Average usage time vs. Failure rate ({dataset_name})')
@@ -649,35 +686,35 @@ class SimulationEnvironment():
         # Plot the points (AUT, failure_rate)
         points = [(130.766, 0.0025), (135.5835, 0.0035), (140.932, 0.0045), (145.784, 0.0065),
                   (147.6945, 0.007), (148.0725, 0.0075), (148.0859, 0.0075), (152.9085, 0.009),
+                  (157.193, 0.0115), (159.135, 0.012),  (159.369, 0.0125), (161.4775, 0.015),
                   (163.1935, 0.017), (171.082, 0.027), (177.3905, 0.045), (182.55249, 0.066),
                   (186.954, 0.1015), (190.6155, 0.154), (193.219, 0.23), (195.3825, 0.3495),
                   (196.7805, 0.3495), (197.3625, 1)]
         labels = ['00086881', '00084531', '00082033', '00080674',
                   '00079969', '00080103', '00080096', '00078550',
+                  '00078000', '00077362', '00077562', '000780982',
                   '00078502', '00080728', '00088004', '00097019', '00113723', '00139081',
                   '00176541', '00235748', '00347143', '00562979']
         beta = [0.0008688123, 0.00084531754, 0.0008203325, 0.000806749,
                 0.00079969877, 0.00080103402, 0.000800961, 0.0007855097,
+                0.00078000363, 0.0007736268, 0.00077562832, 0.000780982,
                 0.0007850258, 0.0008072801, 0.00088004, 0.0009701927, 0.00113723, 0.001390816,
                 0.0017654118, 0.002357483, 0.00347143701,  0.005629798, ]
 
         for i, (point, label) in enumerate(zip(points, labels)):
-            ax.plot(point[0], point[1], marker='o', markersize=8, label=label, color='C{}'.format(i))
+            #ax.plot(point[0], point[1], marker='o', markersize=6, label=label, color='C{}'.format(i))  # each point
+            ax.plot(point[0], point[1], marker='o', markersize=6, color='C{}'.format(i))
 
         # Add legend
-        ax.legend()
+        ax.legend(fontsize='1')
 
         # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
-        beta = 0.000785025
+        beta = 0.0007736268
 
         # Plot line connecting origin and min point
         x_vals = np.array([0, 205])
-        y_vals = beta * x_vals - 0.11111016
-        ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.8f}')
-
-
-
-
+        y_vals = beta * x_vals - 0.11105409866
+        ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.9f}')
 
         # Set labels and title based on dataset number
         dataset_name = f"Dataset {dataset_number}"
@@ -685,10 +722,11 @@ class SimulationEnvironment():
 
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
-            # ax.set_xlim(0, 200)
-            #ax.set_ylim(0, 0.2)
-            #ax.set_xlim(120, 170)
-            ax.set_xlim(130, 170)
+            #ax.set_xlim(0, 200)
+            #ax.set_ylim(0, 0.4)
+            #ax.set_xlim(160, 200)
+            ax.set_xlim(150, 170)
+            #ax.set_xlim(130, 170)
             ax.set_ylim(-0.01, 0.03)
         elif dataset_number == 2:  # Tentative value
             ax.set_ylim(135, 220)
@@ -830,10 +868,10 @@ class SimulationEnvironment():
             x_vals = np.array([0, 200])
             #x_vals = np.linspace(0, min_point[0], 100)
             y_vals = slope * x_vals
-            ax.plot(x_vals, y_vals, 'r--', label=f'Lambda: {slope:.2f}')
+            ax.plot(x_vals, y_vals, 'r--', label=f'Lambda: {slope:.7f}')
 
             # Print coordinates of the min point and slope
-            min_text = f"({min_point[0]:.2f}, {min_point[1]:.2f})"
+            min_text = f"({min_point[0]:.3f}, {min_point[1]:.3f})"
             ax.text(min_point[0], min_point[1], min_text, verticalalignment='bottom', horizontalalignment='right')
 
 
@@ -843,9 +881,10 @@ class SimulationEnvironment():
 
         # Set y-axis and x-axis limits based on dataset number
         if dataset_number == 1:
-            ax.set_xlim(160, 205)
-            #ax.set_xlim(140, 170)
-            ax.set_ylim(0, 2000)
+            #ax.set_xlim(120, 205)
+            ax.set_xlim(140, 170)
+            ax.set_ylim(1000, 1250)
+            #ax.set_ylim(0, 2000)
         elif dataset_number == 2: # Tentative value
             ax.set_ylim(135, 220)
             ax.set_xlim(-5, 265)
@@ -1011,13 +1050,4 @@ class SimulationEnvironment():
         plt.ylabel('Average Number of Observations')
         plt.title('Average Number of Observations per Episode')
         plt.show()
-
-
-
-
-
-
-
-
-
 

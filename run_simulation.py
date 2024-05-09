@@ -588,7 +588,6 @@ class RunSimulation():
                 if chosen_action == 'replace':
                     print('replace')
                     print(RL_env.environment.iloc[state_index]['time_cycles'])
-                    #print(np.dot(self.agent.best_weights['replace'], current_state))
                     total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
 
                 # count 'replace failure'
@@ -715,6 +714,28 @@ class RunSimulation():
 
         self.env.plot_RL_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels,
                                           test_replace_failure, test_average_usage_time, self.CONTINUE_COST)
+    def Q_value_to_RUL(self, data_sample_index, scale):
+        # 학습된 continue action에 대한 weights을 이용해 RUL을 예측.
+        # replace action에 대한 q-value는 0으로 고정이므로, 이를 threshold로 보면 됨.
+        # Q_continue <= Q_replace (0)일 때 replace를 하므로.
+
+        with open('RL_best_weights_beta_00077362686.pkl', 'rb') as f:
+            self.agent.best_weights = pickle.load(f)
+
+        full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
+        full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        full_data.reset_index(drop=True, inplace=True)  # index reset. (리셋하지 않으면 state 전이가 되지 않음)
+
+        self.env.plot_RUL_prediction_by_q_value(full_data, self.agent.best_weights['continue'], scale)
+
+        #for i in range(self.num_sample_datasets):
+        #    self.test_RL_random_observation(i)  # 여기에 method를 추가해야함. rul prediction을 하도록.
+
+    def plot_Q_value_to_RUL_all_samples(self, scale):
+        for i in range(self.num_sample_datasets):
+            self.Q_value_to_RUL(i, scale)
+
 
     def run_lr_simulation(self, data_sample_index):
         # Data preprocessing 1 : separate train, valid, full datasets.
@@ -828,8 +849,7 @@ class RunSimulation():
 
         # simulation by threshold
         full_by_threshold_dfs_list = self.env.random_obs_simulation_by_threshold(merged_full_dfs, self.threshold_values,
-                                                                      self.REPLACE_COST, self.FAILURE_COST)
-        # Organize learning results by loss function
+                                                                      -self.REWARD_ACTUAL_REPLACE, -self.REWARD_ACTUAL_FAILURE)
         full_by_loss_dfs = self.env.calculate_NoF_AUT_by_threshold(full_by_threshold_dfs_list, self.threshold_values)
 
         # save the learning results to a global variable
@@ -861,6 +881,7 @@ class RunSimulation():
         global test_average_rewards, test_average_usage_times, test_replace_failures
         with open('average_by_loss_dfs.pkl', 'rb') as f:
             average_by_loss_dfs = pickle.load(f)
+        self.env.plot_simulation_results(average_by_loss_dfs , self.num_dataset)
         #self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
         self.env.plot_simulation_results_x_y_swap(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100)
         self.env.plot_simulation_results_x_y_swap_cost(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100, -self.REWARD_ACTUAL_REPLACE, -self.REWARD_ACTUAL_FAILURE)
@@ -877,7 +898,7 @@ run_sim = RunSimulation('config_009.ini')
 Linear Regression Simulation
 """
 #run_sim.run_many()
-run_sim.plot_results()
+#run_sim.plot_results()
 
 
 """ #################################
@@ -893,3 +914,6 @@ Reinforcement Learning (value-based)
 # 저장된 weights으로 전체 엔진에 대한 test 수행.
 #run_sim.run_RL_simulation()
 #run_sim_1.run_RL_simulation()
+
+
+run_sim.plot_Q_value_to_RUL_all_samples(0.06)
