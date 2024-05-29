@@ -46,6 +46,8 @@ class Linear_Regression_TD() :
       X_diff_T = (( self.X[i, :] - self.X[i - 1, :] ).reshape( self.p, 1 ))
       X_diff_T_sum += X_diff_T
 
+    #print(np.linalg.inv(X_T_X + (self.alpha * X_diff_T_X_diff_sum) + self.lambda_identity) @ (X_T_X + (self.alpha * X_diff_T_X_diff_sum) + self.lambda_identity))
+
     self.W = np.linalg.inv(X_T_X + (self.alpha * X_diff_T_X_diff_sum) + self.lambda_identity) @ (X_T_Y - self.alpha * X_diff_T_sum)
 
     # Print weight

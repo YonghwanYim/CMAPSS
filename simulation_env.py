@@ -193,7 +193,41 @@ class SimulationEnvironment():
         ax.legend(loc='upper right')  # Add legend
 
         # Plot settings
-        plt.xlim(250, 0)  # Reverse the x-axis so RUL counts down to zero
+        plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
+        #plt.ylim(-50, 200)
+        plt.show()
+
+    def plot_RUL_prediction_by_lr_td_loss(self, environment, weights, scale):
+
+        # Calculate predicted RUL by multiplying 's_0' to 's_21' columns with weights_by_RL for all rows
+        predicted_RUL = np.dot(environment.iloc[:, 5:27], weights)
+
+        # Apply scale to predicted RUL values
+        predicted_RUL *= scale
+
+        # Add a new column 'predicted_RUL_by_Q' to the environment DataFrame
+        environment['predicted_RUL'] = predicted_RUL
+
+        grouped = environment.groupby('unit_number')
+
+        # Set subplot
+        fig, ax = plt.subplots(figsize=(16, 9))
+
+        # Plot for each unit_number
+        for unit, group in grouped:
+            #ax.plot(group['RUL'], group['predicted_RUL_by_Q'], label=f'Unit {unit}')
+            ax.plot(group['RUL'], group['predicted_RUL'])
+
+        # Draw a red dashed line at y=0
+        ax.axhline(y=0, color='r', linestyle='--', label='threshold (0)')
+
+        ax.set_xlabel('Remaining Useful Life')
+        ax.set_ylabel('Predicted RUL')
+        ax.set_title('Predicted RUL by Unit Number')
+        ax.legend(loc='upper right')  # Add legend
+
+        # Plot settings
+        plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
         #plt.ylim(-50, 200)
         plt.show()
 
@@ -728,6 +762,84 @@ class SimulationEnvironment():
             ax.set_xlim(150, 170)
             #ax.set_xlim(130, 170)
             ax.set_ylim(-0.01, 0.03)
+        elif dataset_number == 2:  # Tentative value
+            ax.set_ylim(135, 220)
+            ax.set_xlim(-5, 265)
+        elif dataset_number == 3:  # Tentative value
+            ax.set_ylim(190, 248)
+            ax.set_xlim(-5, 105)
+        elif dataset_number == 4:  # Tentative value
+            ax.set_ylim(180, 260)
+            ax.set_xlim(-5, 255)
+
+        # Set labels and legend
+        ax.set_xlabel('Average usage time')
+        ax.set_ylabel('Failure rate')
+        ax.legend()
+
+        # ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Set integer ticks for y-axes
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_simulation_results_x_y_swap_point_td_loss(self, by_loss_dfs, dataset_number, loss_labels, max_engine):
+        """ Displaying simulation results in curve forms for each loss function (swap x, y axis)
+
+        Args:
+            by_loss_dfs (list) : a list of dataframes for each threshold.
+            dataset_number (int): the number of the dataset (1, 2, 3, or 4).
+            loss_labels (list) : a list of labels for the loss.
+        """
+
+        # Create a list of colors for each dataframe
+        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # Loop through the dataframes and plot scatter points with different colors
+        for i, by_loss_df in enumerate(by_loss_dfs):
+            ax.plot(
+                by_loss_df['Average usage time'],
+                by_loss_df['Number of replace failures'] / max_engine,  # Divide by 'max_engine' to get the failure rate
+                '+-',
+                label=loss_labels[i],  # use the custom label
+                color=colors[i],
+                alpha=0.5
+            )
+
+        # Plot the points (AUT, failure_rate)
+        #points = [(159.135, 0.012), (151.239, 0.0255), (197.3625, 1), (197.3625, 1), (197.163, 0.785), (193.440, 0.249)] # for td ratio loss
+        points = [(159.135, 0.012), (197.3625, 1), (197.3625, 1), (197.3575, 0.984), (196.919, 0.699), (193.440, 0.249)] # for td loss
+        labels = ['beta : 0.00077362', 'alpha 1.0', 'alpha 0.8', 'alpha 0.5', 'alpha 0.2', 'alpha 0.0']
+        beta = [0.0007736268]
+
+        for i, (point, label) in enumerate(zip(points, labels)):
+            ax.plot(point[0], point[1], marker='o', markersize=6, label=label, color='C{}'.format(i))  # each point
+            #ax.plot(point[0], point[1], marker='o', markersize=6, color='C{}'.format(i))
+
+        # Add legend
+        ax.legend(fontsize='1')
+
+        # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
+        beta = 0.0007736268
+
+        # Plot line connecting origin and min point
+        x_vals = np.array([0, 205])
+        y_vals = beta * x_vals - 0.11105409866
+        ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.9f}')
+
+        # Set labels and title based on dataset number
+        dataset_name = f"Dataset {dataset_number}"
+        ax.set_title(f'Average usage time vs. Failure rate ({dataset_name})')
+
+        # Set y-axis and x-axis limits based on dataset number
+        if dataset_number == 1:
+            #ax.set_xlim(0, 200)
+            ax.set_ylim(0, 1)
+            #ax.set_xlim(160, 200)
+            #ax.set_xlim(150, 170)
+            #ax.set_xlim(130, 170)
+            #ax.set_ylim(-0.01, 0.03)
         elif dataset_number == 2:  # Tentative value
             ax.set_ylim(135, 220)
             ax.set_xlim(-5, 265)

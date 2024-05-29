@@ -9,6 +9,7 @@ class Environment:
         self.environment = data
         self.max_unit_number = self.environment['unit_number'].max()
         self.states = self.environment[['s_{}'.format(i) for i in range(1, 22)]] # if dummy column (s_0)? -> "for i in range(0, 22)"
+        self.lr_states = self.environment[['s_{}'.format(i) for i in range(0, 22)]]
 
     def nextStateIndex(self, action, current_index):
         # action에 따라 next state가 달라짐.
@@ -37,6 +38,8 @@ class Agent:
         # Linear Function Approximation (value-based)
         self.weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions}
         self.best_weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions} # for save best weight
+        self.lr_weights_by_td = (np.random.normal(loc=0, scale=0.5, size=22))
+        self.lr_best_weights = {action: np.random.normal(loc=0, scale=0.5, size=22) for action in actions} # 상수항까지 포함해서 22.
 
     def get_weights(self):
         return self.weights
@@ -53,6 +56,9 @@ class Agent:
 
     def save_best_weights(self, best_weights):
         self.best_weights = best_weights
+
+    def update_lr_weights_by_gradient(self, gradient, learning_rate):
+        self.lr_weights_by_td = self.lr_weights_by_td - learning_rate * gradient
 
 
 

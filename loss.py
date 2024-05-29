@@ -12,6 +12,7 @@ def directed_mse_loss(y_true, y_pred):
 
 # 이 함수를 수정하던, run_cpu.py를 수정하던 해야함. 우선 gradient를 구할 수 없어서 에러가 발생함.
 # different_td_loss를 수정하는 것보다 RL 환경 구축이 우선이니 RL부터 완성하고 시간 남으면 수정하자.
+# 일단 tensorflow 라이브러리로 컴파일하기 위해서는 loss의 입력은 1개여야 함.
 
 def different_td_loss(y_true, y_pred, td_alpha):
     global previous_prediction

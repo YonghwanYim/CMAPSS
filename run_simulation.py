@@ -5,6 +5,7 @@ import configparser
 import tensorflow as tf
 from tensorflow.keras import layers, models
 import numpy as np
+import pandas as pd
 import pickle        # it is suitable for saving Python objects.
 import warnings
 from copy import copy
@@ -16,6 +17,7 @@ from simulation_env import SimulationEnvironment
 from loss import directed_mse_loss
 from loss import different_td_loss
 from loss import previous_prediction, previous_true_label  # use global variable
+from loss_td import DecisionAwareTD
 from RL_component import Environment
 from RL_component import Rewards
 from RL_component import Agent
@@ -34,6 +36,7 @@ average_by_loss_dfs = []
 average_rewards = []
 average_actual_rewards = []
 training_loss = []
+lr_td_training_loss = []
 
 test_average_rewards = []
 test_average_actual_rewards = []      # for average performance.
@@ -61,6 +64,11 @@ class RunSimulation():
 
         # Learning rate for different td loss() (loss.py)
         self.td_alpha = float(config['SimulationSettings']['td_alpha'])
+        self.td_beta = float(config['SimulationSettings']['td_beta'])
+        self.td_learning_rate = float(config['SimulationSettings']['td_learning_rate'])
+        self.max_epoch = int(config['SimulationSettings']['max_epoch'])
+        self.td_weight = np.random.normal(loc=0, scale=0.5, size=22)
+        self.td_simulation_threshold = float(config['SimulationSettings']['td_simulation_threshold'])
 
         # constant of simulation
         self.threshold_start = int(config['SimulationSettings']['threshold_start'])
@@ -105,6 +113,316 @@ class RunSimulation():
                                                       self.train_data, self.valid_data, self.full_data)
         # sampled_datasets에 RUL column 추가.
         self.sampled_datasets_with_RUL = self.env.add_RUL_column_to_sampled_datasets(self.sampled_datasets)
+
+
+    def train_lr_by_DA_TD_loss(self, data_sample_index, alpha, beta, learning_rate):
+        train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
+        train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+        train_data.reset_index(drop=True, inplace=True)  # index reset
+
+        DA_TD = DecisionAwareTD(train_data, beta, self.td_weight, alpha)
+
+        DA_TD.preprocessing()
+        #print(self.td_weight)
+        gradient = DA_TD.calculate_gradient()
+        self.td_weight = self.td_weight - learning_rate * gradient
+        #print(self.td_weight)
+
+        #loss = ((self.td_weight.T.dot(DA_TD.X_t.T) - DA_TD.Y.T) ** 2).values.sum()
+        #lr_td_training_loss.append(loss)
+
+        lr_td_training_loss.append((gradient ** 2).values.sum())
+
+    def calaulate_solution_of_lr_DA_TD_loss(self, lambd):
+        # 모든 샘플 데이터를 하나의 데이터로 합쳐서 수행
+        combined_train_data = pd.DataFrame()
+
+        for i in range(self.num_sample_datasets):
+            sample_data = self.sampled_datasets_with_RUL[i][0].copy()
+            combined_train_data = pd.concat([combined_train_data, sample_data], ignore_index=True)
+
+        combined_train_data[self.columns_to_scale] = combined_train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+        combined_train_data.reset_index(drop=True, inplace=True)  # index reset
+
+        DA_TD = DecisionAwareTD(combined_train_data, self.td_beta, self.td_weight, self.td_alpha)
+        DA_TD.preprocessing()
+
+        self.td_weight = DA_TD.calculate_closed_form_solution(lambd)
+        #self.td_weight = DA_TD.calculate_closed_form_solution_ratio(lambd)
+
+        # test
+        combined_train_data.insert(loc=combined_train_data.columns.get_loc('s_1'), column='s_0', value=1)
+        selected_data = combined_train_data.iloc[:, 5:27]
+        print(selected_data)
+        print(selected_data.dot(self.td_weight))
+
+
+        # Save weights to a file using pickle
+        with open('LR_TD_weight_test.pkl', 'wb') as f:
+            pickle.dump(self.td_weight, f)
+
+    def train_many_lr_by_DA_TD_loss(self):
+        for epoch in range(self.max_epoch):
+            print(epoch + 1)
+            for i in range(self.num_sample_datasets):
+                # self.train_lr_by_td_loss(i, epoch, self.td_alpha, 0.001287, 0.005)
+                self.train_lr_by_DA_TD_loss(i, self.td_alpha, self.td_beta, self.td_learning_rate)
+
+        self.env.plot_training_loss(self.max_epoch, self.num_sample_datasets, lr_td_training_loss)
+        print(self.td_weight)
+
+        # Save weights to a file using pickle
+        with open('LR_TD_weight_test.pkl', 'wb') as f:
+            pickle.dump(self.td_weight, f)
+
+    def train_continue_many_lr_by_DA_td_loss(self):
+        with open('LR_TD_weight_test.pkl', 'rb') as f:
+            self.td_weight = pickle.load(f)
+
+        # Iterate over the number of sample datasets
+        for epoch in range(self.max_epoch):
+            print(epoch + 1)
+            # Iterate over the number of sample datasets
+            for i in range(self.num_sample_datasets):
+                self.train_lr_by_DA_TD_loss(i, self.td_alpha, self.td_beta, self.td_learning_rate)
+
+        self.env.plot_training_loss(self.max_epoch, self.num_sample_datasets, lr_td_training_loss)
+        print(self.td_weight)
+
+        # Save weights to a file using pickle
+        with open('LR_TD_weight_test.pkl', 'wb') as f:
+            pickle.dump(self.td_weight, f)
+
+
+    def train_many_lr_by_td_loss(self):  # 샘플 데이터셋 전체를 하나의 epoch로 취급.
+
+        # Iterate over the number of sample datasets
+        for epoch in range(self.max_epoch):
+            # decay epsilon (linear)
+            # print test
+            print(epoch + 1)
+
+            # Iterate over the number of sample datasets
+            for i in range(self.num_sample_datasets):
+                # self.train_lr_by_td_loss(i, epoch, self.td_alpha, 0.001287, 0.005)
+                self.train_lr_by_td_loss_random_observation(i, epoch, self.td_alpha, self.td_beta,
+                                                            self.td_learning_rate)
+
+        self.env.plot_training_loss(self.max_epoch, self.num_sample_datasets, lr_td_training_loss)
+
+        # Save RL_best_weights to a file using pickle
+        with open('LR_TD_weight.pkl', 'wb') as f:
+            pickle.dump(self.agent.lr_weights_by_td, f)
+
+
+    # 모든 데이터가 관측 가능할 때, td_loss를 이용해 학습시킨 lr weight
+    def train_lr_by_td_loss(self, data_sample_index, epoch, alpha, beta, learning_rate):
+        state_index = 0
+        num_of_step = 0
+        sum_of_gradient = 0
+        loss_epoch = 0
+
+        train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
+        train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        # dummy row 추가 (마지막 row를 2번 복사해서 뒤에 추가)
+        dummy_row = train_data.iloc[-1].copy()
+        dummy_row['unit_number'] = int(dummy_row['unit_number']) + 1
+        dummy_row_2 = dummy_row.copy()
+        dummy_row_2['unit_number'] = int(dummy_row_2['unit_number']) + 1
+
+        train_data = train_data._append(dummy_row)
+        train_data = train_data._append(dummy_row_2)
+        # float으로 변환된 자료형을 다시 int로 변환
+        train_data['unit_number'] = train_data['unit_number'].astype(int)
+        train_data['time_cycles'] = train_data['time_cycles'].astype(int)
+        train_data['RUL'] = train_data['RUL'].astype(int)
+
+        train_data.reset_index(drop=True, inplace=True)  # index reset (reset 하지 않으면 state 전이가 되지 않음)
+        RL_env = Environment(train_data)
+
+        for unit_num in range(RL_env.max_unit_number):  # unit num : 0, ... , (max_unit_number - 1)
+            state = RL_env.states.iloc[state_index].values
+
+            # TD loss를 위해, 엔진이 바뀌고 처음 반복은 건너뜀.
+            first_iteration = True
+            # 항상 continue action만 수행.
+            while (state_index < RL_env.environment[
+                RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[-1] + 1) \
+                    and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
+
+                gradient = 0
+
+                # TD loss 계산을 위해 엔진이 바뀌고 처음 반복은 건너뜀. (t-1이 존재하지 않으므로)
+                if first_iteration:
+                    first_iteration = False
+                    state_index += 1  # state_index를 증가시키고 continue로 건너뜀.
+                    continue
+
+                current_state = state
+                chosen_action = 'continue'
+
+                next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
+                next_state = RL_env.states.iloc[next_state_index].values
+
+                # 리워드를 통해 엔진이 바뀌는 것을 알 수 있음.
+                current_reward = self.reward.get_reward(state_index, next_state_index, chosen_action,
+                                                        RL_env.environment)
+
+                WX_t = np.dot(self.agent.lr_weights_by_td, state)  # W * X_t
+                #print(WX_t)
+                X_diff = state - RL_env.states.iloc[state_index - 1].values  # X_t - X_{t-1}
+                #print(X_diff)
+
+                # 엔진 내의 마지막 time_step이면 td를 (1/beta)로 gradient를 업데이트.
+                if current_reward == (self.reward.r_continue_but_failure):
+                    gradient = 2 * (WX_t - RL_env.environment['RUL'].iloc[state_index]) * current_state + \
+                               2 * alpha * (np.dot(self.agent.lr_weights_by_td, X_diff) - (1 / beta)) * X_diff
+                # 마지막 time_step이 아닌 경우에는 td를 -1로 gradient update
+                else :
+                    gradient = 2 * (WX_t - RL_env.environment['RUL'].iloc[state_index]) * current_state + \
+                               2 * alpha * (np.dot(self.agent.lr_weights_by_td, X_diff) + 1) * X_diff
+
+                sum_of_gradient += gradient
+                #print(gradient)
+                #print(sum_of_gradient)
+
+                # 다음 상태로 이동
+                state_index = next_state_index
+                state = RL_env.states.iloc[state_index].values
+                num_of_step += 1
+
+        mean_sum_of_gradient = sum_of_gradient / num_of_step
+        #print(mean_sum_of_gradient)
+        self.agent.update_lr_weights_by_gradient(mean_sum_of_gradient, learning_rate)
+
+        lr_td_training_loss.append(np.dot(mean_sum_of_gradient, mean_sum_of_gradient))
+
+    def train_lr_by_td_loss_random_observation(self, data_sample_index, epoch, alpha, beta, learning_rate):
+        state_index = 0
+        num_of_step = 0
+        sum_of_gradient = 0
+        loss_epoch = 0
+
+        train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
+        train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        # dummy row 추가 (마지막 row를 2번 복사해서 뒤에 추가)
+        dummy_row = train_data.iloc[-1].copy()
+        dummy_row['unit_number'] = int(dummy_row['unit_number']) + 1
+        dummy_row_2 = dummy_row.copy()
+        dummy_row_2['unit_number'] = int(dummy_row_2['unit_number']) + 1
+
+        train_data = train_data._append(dummy_row)
+        train_data = train_data._append(dummy_row_2)
+        # float으로 변환된 자료형을 다시 int로 변환
+        train_data['unit_number'] = train_data['unit_number'].astype(int)
+        train_data['time_cycles'] = train_data['time_cycles'].astype(int)
+        train_data['RUL'] = train_data['RUL'].astype(int)
+
+        train_data.reset_index(drop=True, inplace=True)  # index reset (reset 하지 않으면 state 전이가 되지 않음)
+        RL_env = Environment(train_data)
+
+        for unit_num in range(RL_env.max_unit_number):  # unit num : 0, ... , (max_unit_number - 1)
+            state = RL_env.states.iloc[state_index].values
+
+            # TD loss를 위해, 엔진이 바뀌고 처음 반복은 건너뜀.
+            first_iteration = True
+            # 항상 continue action만 수행.
+            while (state_index < RL_env.environment[
+                RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[-1] + 1) \
+                    and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
+
+                gradient = 0
+
+                # TD loss 계산을 위해 엔진이 바뀌고 처음 반복은 건너뜀. (t-1이 존재하지 않으므로)
+                if first_iteration:
+                    first_iteration = False
+                    state_index += 1  # state_index를 증가시키고 continue로 건너뜀.
+                    continue
+
+                # 관측하지 못했더라도, RUL의 차이를 정확히 loss에 반영하기 위한 변수.
+                time_difference = RL_env.environment['time_cycles'].iloc[state_index] - RL_env.environment['time_cycles'].iloc[state_index - 1]
+
+                current_state = state
+                chosen_action = 'continue'
+
+                next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
+                next_state = RL_env.states.iloc[next_state_index].values
+
+                # 리워드를 통해 엔진이 바뀌는 것을 알 수 있음.
+                current_reward = self.reward.get_reward(state_index, next_state_index, chosen_action,
+                                                        RL_env.environment)
+
+                WX_t = np.dot(self.agent.lr_weights_by_td, state)  # W * X_t
+                # print(WX_t)
+                X_diff = state - RL_env.states.iloc[state_index - 1].values  # X_t - X_{t-1}
+                # print(X_diff)
+
+                # 엔진 내의 마지막 time_step이면 td를 (1/beta)로 gradient를 업데이트.
+                if current_reward == (self.reward.r_continue_but_failure):
+                    gradient = 2 * (WX_t - RL_env.environment['RUL'].iloc[state_index]) * current_state + \
+                               2 * alpha * (np.dot(self.agent.lr_weights_by_td, X_diff) - (1 / beta)) * X_diff
+                    sum_of_gradient += gradient
+                # 마지막 time_step이 아닌 경우에는 td를 -1로 gradient update
+                else:
+                    gradient = 2 * (WX_t - RL_env.environment['RUL'].iloc[state_index]) * current_state + \
+                               2 * alpha * (np.dot(self.agent.lr_weights_by_td, X_diff) + time_difference) * X_diff
+                    sum_of_gradient += gradient
+
+                #sum_of_gradient += gradient
+                # print(gradient)
+                # print(sum_of_gradient)
+
+                # 다음 상태로 이동
+                state_index = next_state_index
+                state = RL_env.states.iloc[state_index].values
+                num_of_step += 1
+
+        mean_sum_of_gradient = sum_of_gradient / num_of_step
+        # print(mean_sum_of_gradient)
+        self.agent.update_lr_weights_by_gradient(mean_sum_of_gradient, learning_rate)
+
+        lr_td_training_loss.append(np.dot(mean_sum_of_gradient, mean_sum_of_gradient))
+
+    def train_many_lr_by_td_loss(self):  # 샘플 데이터셋 전체를 하나의 epoch로 취급.
+
+        # Iterate over the number of sample datasets
+        for epoch in range(self.max_epoch):
+            # decay epsilon (linear)
+            # print test
+            print(epoch + 1)
+
+            # Iterate over the number of sample datasets
+            for i in range(self.num_sample_datasets):
+                #self.train_lr_by_td_loss(i, epoch, self.td_alpha, 0.001287, 0.005)
+                self.train_lr_by_td_loss_random_observation(i, epoch, self.td_alpha, self.td_beta, self.td_learning_rate)
+
+        self.env.plot_training_loss(self.max_epoch, self.num_sample_datasets, lr_td_training_loss)
+
+        # Save RL_best_weights to a file using pickle
+        with open('LR_TD_weight.pkl', 'wb') as f:
+            pickle.dump(self.agent.lr_weights_by_td, f)
+    def train_continue_many_lr_by_td_loss(self):  # 샘플 데이터셋 전체를 하나의 epoch로 취급.
+        with open('LR_TD_weight.pkl', 'rb') as f:
+            self.agent.lr_weights_by_td = pickle.load(f)
+
+        # Iterate over the number of sample datasets
+        for epoch in range(self.max_epoch):
+            # decay epsilon (linear)
+            # print test
+            print(epoch + 1)
+
+            # Iterate over the number of sample datasets
+            for i in range(self.num_sample_datasets):
+                #self.train_lr_by_td_loss(i, epoch, self.td_alpha, 0.001287, 0.005)
+                self.train_lr_by_td_loss_random_observation(i, epoch, self.td_alpha, self.td_beta, self.td_learning_rate)
+
+        self.env.plot_training_loss(self.max_epoch, self.num_sample_datasets, lr_td_training_loss)
+
+        # Save RL_best_weights to a file using pickle
+        with open('LR_TD_weight.pkl', 'wb') as f:
+            pickle.dump(self.agent.lr_weights_by_td, f)
 
 
     def train_RL_off_policy(self, data_sample_index, epsilon, episode):  # off-policy로 학습. 학습된 weight을 train에는 사용하지 않음.
@@ -623,6 +941,96 @@ class RunSimulation():
         test_average_actual_rewards.append(average_actual_reward)
         test_average_usage_times.append(average_usage_time)
         test_replace_failures.append(replace_failure)
+
+    def test_TD_loss_random_observation(self, data_sample_index):
+        global test_average_rewards, test_average_usage_times, test_replace_failures
+        replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
+        state_index = 0      # state index -> index pointer로 취급하자. (episode 마다 초기화)
+        total_reward = 0
+        total_actual_reward = 0
+        num_of_step = 0
+        total_operation_time = 0
+
+        full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
+        full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        #### dummy row 추가 (마지막 row를 2번 복사해서 뒤에 추가) ##################
+        dummy_row = full_data.iloc[-1].copy()
+        dummy_row['unit_number'] = int(dummy_row['unit_number']) + 1
+        dummy_row_2 = dummy_row.copy()
+        dummy_row_2['unit_number'] = int(dummy_row_2['unit_number']) + 1
+
+        full_data = full_data._append(dummy_row)
+        full_data = full_data._append(dummy_row_2)
+        # float으로 변환된 자료형을 다시 int로 변환
+        full_data['unit_number'] = full_data['unit_number'].astype(int)
+        full_data['time_cycles'] = full_data['time_cycles'].astype(int)
+        full_data['RUL'] = full_data['RUL'].astype(int)
+        ####################################################################
+
+        # s_1 열 왼쪽에 s_0 열을 새롭게 추가하고 모든 값을 1로 초기화
+        full_data.insert(loc=full_data.columns.get_loc('s_1'), column='s_0', value=1)
+
+        full_data.reset_index(drop=True, inplace=True) # index reset. (리셋하지 않으면 state 전이가 되지 않음)
+        RL_env = Environment(full_data)
+
+        for unit_num in range(RL_env.max_unit_number):  # unit num : 0, .... , (max_unit_number - 1)
+            state = RL_env.lr_states.iloc[state_index].values
+
+            while (state_index <
+                   RL_env.environment[
+                       RL_env.environment['unit_number'] == (RL_env.environment['unit_number'].max() - 2)].index[
+                       -1] + 1) and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
+                current_state = state
+                #chosen_action = max(self.agent.actions,
+                #                    key=lambda a: np.dot(self.agent.lr_best_weights[a], current_state))  # greedy action
+                if np.dot(self.agent.lr_best_weights['continue'], current_state) > self.td_simulation_threshold:
+                    chosen_action = 'continue'
+                else:
+                    chosen_action = 'replace'
+                next_state_index = RL_env.nextStateIndex(chosen_action, state_index)
+                next_state = RL_env.lr_states.iloc[next_state_index].values
+                current_reward = self.reward.get_reward(state_index, next_state_index, chosen_action, RL_env.environment)
+
+                if chosen_action == 'replace':
+                    print('replace')
+                    print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
+
+                # count 'replace failure'
+                if current_reward == (self.reward.r_continue_but_failure):
+                    print('continue but failure')
+                    print(RL_env.environment.iloc[state_index]['time_cycles'])
+                    total_operation_time += RL_env.environment.iloc[state_index]['time_cycles']
+                    replace_failure += 1
+
+                # update total reward.
+                total_reward += current_reward
+
+                # 원래 문제의 reward 저장 (출력용; 학습에 사용 x)
+                total_actual_reward += self.reward.get_actual_reward(state_index, next_state_index,
+                                                                     chosen_action, RL_env.environment)
+
+                # move next state.
+                state_index = next_state_index
+                state = RL_env.lr_states.iloc[state_index].values
+                num_of_step += 1
+
+        # average_reward = total_reward / num_of_step
+        # average_actual_reward = total_actual_reward / num_of_step
+        average_reward = total_reward / total_operation_time
+        average_actual_reward = total_actual_reward / total_operation_time
+        average_usage_time = total_operation_time / (RL_env.environment['unit_number'].max() - 2)
+        print(
+            f"number of engine : {RL_env.environment['unit_number'].max() - 2}, average reward : {average_reward},"
+            f" actual average reward : {average_actual_reward},"
+            f" replace failure : {replace_failure}, average usage time : {average_usage_time}")
+
+        test_average_rewards.append(average_reward)
+        test_average_actual_rewards.append(average_actual_reward)
+        test_average_usage_times.append(average_usage_time)
+        test_replace_failures.append(replace_failure)
+
     def test_RL(self, data_sample_index):
         global test_average_rewards, test_average_usage_times, test_replace_failures
         replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
@@ -729,12 +1137,31 @@ class RunSimulation():
 
         self.env.plot_RUL_prediction_by_q_value(full_data, self.agent.best_weights['continue'], scale)
 
-        #for i in range(self.num_sample_datasets):
-        #    self.test_RL_random_observation(i)  # 여기에 method를 추가해야함. rul prediction을 하도록.
-
     def plot_Q_value_to_RUL_all_samples(self, scale):
         for i in range(self.num_sample_datasets):
             self.Q_value_to_RUL(i, scale)
+
+    def lr_td_loss_to_RUL(self, data_sample_index, scale):
+        # 학습된 continue action에 대한 weights을 이용해 RUL을 예측.
+        # replace action에 대한 q-value는 0으로 고정이므로, 이를 threshold로 보면 됨.
+        # Q_continue <= Q_replace (0)일 때 replace를 하므로.
+
+        with open('LR_TD_weight_test.pkl', 'rb') as f:
+            self.td_weight = pickle.load(f)
+
+        full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
+        full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        full_data.insert(loc=full_data.columns.get_loc('s_1'), column='s_0', value=1)
+
+        full_data.reset_index(drop=True, inplace=True)  # index reset. (리셋하지 않으면 state 전이가 되지 않음)
+
+        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale)
+
+    def plot_lr_td_loss_to_RUL_all_samples(self, scale):
+        for i in range(self.num_sample_datasets):
+            self.lr_td_loss_to_RUL(i, scale)
+
 
 
     def run_lr_simulation(self, data_sample_index):
@@ -861,6 +1288,44 @@ class RunSimulation():
         #self.env.plot_simulation_results(full_by_loss_dfs, self.num_dataset)
         #self.env.plot_simulation_results_scale_up(full_by_loss_dfs, self.num_dataset, self.loss_labels)
 
+    def run_TD_loss_simulation(self):
+        global test_average_rewards, test_average_usage_times, test_replace_failures
+        # 이 method는 학습이 완료된 bestweight을 불러와서 테스트 환경에서 실행.
+        # 아마도 continue의 reward에 따른 다양한 RL 학습 결과를 테스트 환경에서 실행 후 하나의 plot에 점을 찍어내야 함.
+        # 점을 찍을 때, continue의 reward가 무엇이었는지 같이 표시해주면 좋음. reward에 따른 성능을 볼 수 있도록.
+        # Load average_by_loss_dfs from the file
+        with open('average_by_loss_dfs.pkl', 'rb') as f:
+            average_by_loss_dfs = pickle.load(f)
+        self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels)
+        with open('LR_TD_weight_test.pkl', 'rb') as f:
+            self.agent.lr_best_weights['continue'] = pickle.load(f)
+            #self.agent.best_weights['continue'] = pickle.load(f)
+        self.agent.lr_best_weights['replace'] = np.zeros(22)
+        #self.agent.best_weights['replace'] = np.zeros(21)
+        print(self.agent.lr_best_weights)
+
+        for i in range(self.num_sample_datasets):
+            #self.test_RL_random_observation(i)
+            self.test_TD_loss_random_observation(i)
+
+        print(test_average_usage_times)
+        print(self.num_sample_datasets)
+
+        test_average_reward = sum(test_average_rewards) / self.num_sample_datasets
+        test_average_actual_reward = sum(test_average_actual_rewards) / self.num_sample_datasets
+        test_average_usage_time = sum(test_average_usage_times) / self.num_sample_datasets
+        test_replace_failure = sum(test_replace_failures) / self.num_sample_datasets
+        failure_probability = test_replace_failure / 100
+        lambda_policy = (-self.REWARD_ACTUAL_REPLACE + failure_probability * (-self.REWARD_ACTUAL_FAILURE + self.REWARD_ACTUAL_REPLACE)) / test_average_usage_time
+        beta_policy = lambda_policy / (-self.REWARD_ACTUAL_FAILURE + self.REWARD_ACTUAL_REPLACE)
+
+        print(
+            f" Test average reward : {test_average_reward}, Test actual average reward : {test_average_actual_reward},"
+            f" Test replace failure : {test_replace_failure}, Test average usage time : {test_average_usage_time}, Failure probability : {failure_probability}, lambda : {lambda_policy}, beta : {beta_policy}")
+
+        self.env.plot_RL_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels,
+                                          test_replace_failure, test_average_usage_time, self.CONTINUE_COST)
+
     def run_many(self):
         # Iterate over the number of sample datasets
         for i in range(self.num_sample_datasets):
@@ -888,6 +1353,7 @@ class RunSimulation():
         self.env.plot_simulation_results_x_y_swap_cost_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100, -self.REWARD_ACTUAL_REPLACE, -self.REWARD_ACTUAL_FAILURE)
         # AUT_Pi, P_failure는 위의 method에서 return하고 저장 후, 아래 method로 전달하자. 지금은 임시로 값을 직접 넣어둠.
         self.env.plot_simulation_results_x_y_swap_point_lambda_2(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100)
+        self.env.plot_simulation_results_x_y_swap_point_td_loss(average_by_loss_dfs, self.num_dataset, self.loss_labels, 100)
 
 
 
@@ -915,5 +1381,27 @@ Reinforcement Learning (value-based)
 #run_sim.run_RL_simulation()
 #run_sim_1.run_RL_simulation()
 
+""" TD loss로 Linear regression 학습 """
+#run_sim.train_many_lr_by_td_loss()
+#run_sim.train_continue_many_lr_by_td_loss()
+#run_sim.run_TD_loss_simulation()
 
-run_sim.plot_Q_value_to_RUL_all_samples(0.06)
+
+""" RUL prediction by Q-value"""
+"""
+beta_C_scale = 1 / 12.87
+average_reward_scale = 1 / 11.2902
+print(beta_C_scale)
+#print(average_reward_scale)
+run_sim.plot_Q_value_to_RUL_all_samples(beta_C_scale)
+#run_sim.plot_Q_value_to_RUL_all_samples(average_reward_scale)
+"""
+
+
+#run_sim.train_many_lr_by_DA_TD_loss()
+#run_sim.train_continue_many_lr_by_DA_td_loss()
+
+run_sim.calaulate_solution_of_lr_DA_TD_loss(80)  # lambda (ridge)
+#run_sim.run_TD_loss_simulation()
+run_sim.plot_lr_td_loss_to_RUL_all_samples(1)
+#run_sim.plot_results()
