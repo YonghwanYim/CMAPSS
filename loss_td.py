@@ -68,6 +68,31 @@ class DecisionAwareTD:
 
         return mean_gradient
 
+    def calculate_gradient_only_TD(self):
+        self.X_t = self.delete_row1_dataset[self.features]
+        self.Y = self.delete_row1_dataset['RUL']
+        self.Y_X = self.Y.T.dot(self.X_t) # 이 값이 압도적으로 큼.
+        self.TD = self.delete_row1_dataset['TD']
+        self.row_size = self.delete_row1_dataset.shape[0] # row의 수를 저장해, gradient를 구할 때 나눠주기 위함.
+        #print(self.Y.T)
+        #print(self.Y_X)
+
+        self.W_X_X = self.weight.T.dot(self.X_t.T.dot(self.X_t))
+        #print(self.weight.T)
+        #print(self.W_X_X)
+
+        self.X_t_diff_X_t_minus_1 = self.X_t - self.X_t_minus_1
+        #print(self.X_t_diff_X_t_minus_1)
+
+        self.W_X_diff_square = self.weight.T.dot(self.X_t_diff_X_t_minus_1.T.dot(self.X_t_diff_X_t_minus_1))
+        #print(self.W_X_diff_square)
+
+        gradient = 2 * self.alpha * (self.W_X_diff_square + self.TD.T.dot(self.X_t_diff_X_t_minus_1))
+        #gradient = - 2 * self.alpha * (self.weight.T.dot(self.X_t_diff_X_t_minus_1.T) + self.TD.T).dot(self.X_t)
+        mean_gradient = gradient / self.row_size
+
+        return mean_gradient
+
     def calculate_closed_form_solution(self, lambd):
         self.X_t = self.delete_row1_dataset[self.features]
         self.Y = self.delete_row1_dataset['RUL']

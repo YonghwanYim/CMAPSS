@@ -126,6 +126,16 @@ class SimulationEnvironment():
 
         return scaled_column
 
+    def merge_dataframe_only_MSE(self, index_names, y_labels, df1):
+        y_lr_dfs = [pd.DataFrame(df1, columns=['predicted RUL'])]
+        merged_dfs = []
+
+        for i, y_lr_df in enumerate(y_lr_dfs, start=1):
+            merged_df = pd.concat([index_names, y_lr_df, y_labels], axis=1)
+            merged_dfs.append(merged_df)
+
+        return merged_dfs
+
     def merge_dataframe(self, index_names, y_labels, df1, df2, df3, df4, df5, df6):
         y_lr_dfs = [pd.DataFrame(df1, columns=['predicted RUL']),
                     pd.DataFrame(df2, columns=['predicted RUL']),
@@ -201,6 +211,7 @@ class SimulationEnvironment():
 
         # Calculate predicted RUL by multiplying 's_0' to 's_21' columns with weights_by_RL for all rows
         predicted_RUL = np.dot(environment.iloc[:, 5:27], weights)
+        print(environment)
 
         # Apply scale to predicted RUL values
         predicted_RUL *= scale
@@ -229,6 +240,41 @@ class SimulationEnvironment():
         # Plot settings
         plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
         #plt.ylim(-50, 200)
+        plt.show()
+
+    def plot_RUL_prediction_by_lr_td_loss_21(self, environment, weights, scale):
+
+        # Calculate predicted RUL by multiplying 's_0' to 's_21' columns with weights_by_RL for all rows
+        predicted_RUL = np.dot(environment.iloc[:, 5:26], weights)
+        print(environment)
+
+        # Apply scale to predicted RUL values
+        predicted_RUL *= scale
+
+        # Add a new column 'predicted_RUL_by_Q' to the environment DataFrame
+        environment['predicted_RUL'] = predicted_RUL
+
+        grouped = environment.groupby('unit_number')
+
+        # Set subplot
+        fig, ax = plt.subplots(figsize=(16, 9))
+
+        # Plot for each unit_number
+        for unit, group in grouped:
+            #ax.plot(group['RUL'], group['predicted_RUL_by_Q'], label=f'Unit {unit}')
+            ax.plot(group['RUL'], group['predicted_RUL'])
+
+        # Draw a red dashed line at y=0
+        ax.axhline(y=0, color='r', linestyle='--', label='threshold (0)')
+
+        ax.set_xlabel('Remaining Useful Life')
+        ax.set_ylabel('Predicted RUL')
+        ax.set_title('Predicted RUL by Unit Number')
+        ax.legend(loc='upper right')  # Add legend
+
+        # Plot settings
+        plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
+        plt.ylim(-350, 350)
         plt.show()
 
 
@@ -513,7 +559,7 @@ class SimulationEnvironment():
         plt.tight_layout()
         plt.show()
 
-    def plot_simulation_results_scale_up(self, by_loss_dfs, dataset_number, loss_labels):
+    def plot_simulation_results_scale_up(self, by_loss_dfs, dataset_number, loss_labels, isMSE):
         """ Displaying simulation results in curve forms for each loss function
 
         Args:
@@ -523,7 +569,10 @@ class SimulationEnvironment():
         """
 
         # Create a list of colors for each dataframe
-        colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
+        if isMSE == True:
+            colors = ['blue']
+        else:
+            colors = ['blue', 'green', 'red', 'yellow', 'pink', 'purple']
 
         fig, ax = plt.subplots(figsize=(6, 6))
 
@@ -718,36 +767,26 @@ class SimulationEnvironment():
             )
 
         # Plot the points (AUT, failure_rate)
-        points = [(130.766, 0.0025), (135.5835, 0.0035), (140.932, 0.0045), (145.784, 0.0065),
-                  (147.6945, 0.007), (148.0725, 0.0075), (148.0859, 0.0075), (152.9085, 0.009),
-                  (157.193, 0.0115), (159.135, 0.012),  (159.369, 0.0125), (161.4775, 0.015),
-                  (163.1935, 0.017), (171.082, 0.027), (177.3905, 0.045), (182.55249, 0.066),
-                  (186.954, 0.1015), (190.6155, 0.154), (193.219, 0.23), (195.3825, 0.3495),
-                  (196.7805, 0.3495), (197.3625, 1)]
-        labels = ['00086881', '00084531', '00082033', '00080674',
-                  '00079969', '00080103', '00080096', '00078550',
-                  '00078000', '00077362', '00077562', '000780982',
-                  '00078502', '00080728', '00088004', '00097019', '00113723', '00139081',
-                  '00176541', '00235748', '00347143', '00562979']
-        beta = [0.0008688123, 0.00084531754, 0.0008203325, 0.000806749,
-                0.00079969877, 0.00080103402, 0.000800961, 0.0007855097,
-                0.00078000363, 0.0007736268, 0.00077562832, 0.000780982,
-                0.0007850258, 0.0008072801, 0.00088004, 0.0009701927, 0.00113723, 0.001390816,
-                0.0017654118, 0.002357483, 0.00347143701,  0.005629798, ]
+        points = [(159.90, 0.0125), (161.2544, 0.0139), (178.56, 0.046), (193.5445, 0.271), (195.644, 0.4529), (160.411, 0.0135)]
+        labels = ['alpha 1.0 (lambda : 6.957364)', 'alpha 0.9', 'alpha 0.5', 'alpha 0.1', 'alpha 0.0', 'Optimal of MSE (lambda : 6.991415)']
 
         for i, (point, label) in enumerate(zip(points, labels)):
-            #ax.plot(point[0], point[1], marker='o', markersize=6, label=label, color='C{}'.format(i))  # each point
-            ax.plot(point[0], point[1], marker='o', markersize=6, color='C{}'.format(i))
+            ax.plot(point[0], point[1], marker='o', markersize=6, label=label, color='C{}'.format(i))  # each point
+            #ax.plot(point[0], point[1], marker='o', markersize=6, color='C{}'.format(i))
+
+        #for i, (point, label) in enumerate(zip(points, labels)):
+        #    #ax.plot(point[0], point[1], marker='o', markersize=6, label=label, color='C{}'.format(i))  # each point
+        #    ax.plot(point[0], point[1], marker='o', markersize=6, color='C{}'.format(i))
 
         # Add legend
         ax.legend(fontsize='1')
 
         # Plot the line connecting origin and point (AUT_pi, failure_rate_pi)
-        beta = 0.0007736268
+        beta = 0.0007730405
 
         # Plot line connecting origin and min point
         x_vals = np.array([0, 205])
-        y_vals = beta * x_vals - 0.11105409866
+        y_vals = beta * x_vals - 0.11110917595
         ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.9f}')
 
         # Set labels and title based on dataset number
@@ -809,9 +848,11 @@ class SimulationEnvironment():
 
         # Plot the points (AUT, failure_rate)
         #points = [(159.135, 0.012), (151.239, 0.0255), (197.3625, 1), (197.3625, 1), (197.163, 0.785), (193.440, 0.249)] # for td ratio loss
-        points = [(159.135, 0.012), (197.3625, 1), (197.3625, 1), (197.3575, 0.984), (196.919, 0.699), (193.440, 0.249)] # for td loss
-        labels = ['beta : 0.00077362', 'alpha 1.0', 'alpha 0.8', 'alpha 0.5', 'alpha 0.2', 'alpha 0.0']
-        beta = [0.0007736268]
+        #points = [(159.135, 0.012), (197.3625, 1), (197.3625, 1), (197.3575, 0.984), (196.919, 0.699), (193.440, 0.249)] # for td loss
+        #labels = ['beta : 0.00077362', 'alpha 1.0', 'alpha 0.8', 'alpha 0.5', 'alpha 0.2', 'alpha 0.0']
+        points = [(159.90, 0.0125), (161.2544, 0.0139), (178.56, 0.046), (193.5445, 0.271), (195.644, 0.4529), (160.411, 0.0135)]
+        labels = ['alpha 1.0 (lambda : 6.957364)', 'alpha 0.9', 'alpha 0.5', 'alpha 0.1', 'alpha 0.0', 'Optimal of MSE (lambda : 6.991415)']
+        beta = [0.0007730405]
 
         for i, (point, label) in enumerate(zip(points, labels)):
             ax.plot(point[0], point[1], marker='o', markersize=6, label=label, color='C{}'.format(i))  # each point
@@ -825,7 +866,7 @@ class SimulationEnvironment():
 
         # Plot line connecting origin and min point
         x_vals = np.array([0, 205])
-        y_vals = beta * x_vals - 0.11105409866
+        y_vals = beta * x_vals - 0.11110917595
         ax.plot(x_vals, y_vals, 'r--', label=f'Beta: {beta:.9f}')
 
         # Set labels and title based on dataset number
@@ -971,7 +1012,7 @@ class SimulationEnvironment():
 
             # Plot the minimum point
         if min_point:
-            ax.plot(min_point[0], min_point[1], 'ro', label='Minimum cost per time')
+            ax.plot(min_point[0], min_point[1], 'ro', label='Minimum cost per time (MSE)')
 
             # Calculate slope of the line connecting the origin and the min point
             slope = min_point[1] / min_point[0]
@@ -1088,7 +1129,30 @@ class SimulationEnvironment():
         """
         result_dfs = []
 
-        for col_idx in range(6):  # 열 인덱스 0부터 5까지
+        for col_idx in range(5):  # 열 인덱스 0부터 5까지
+            sum_df = by_loss_dfs_list[0][col_idx].copy()
+
+            for sample_idx in range(1, number_of_samples):
+                sum_df += by_loss_dfs_list[sample_idx][col_idx]
+
+            result_df = sum_df / number_of_samples
+            result_dfs.append(result_df)
+
+        return result_dfs
+
+    def calculate_average_performance_only_MSE(self, by_loss_dfs_list, number_of_samples):
+        """ A method that takes results for multiple samples as input,
+            calculates the average for each loss function, and returns the final list.
+
+        Args:
+            by_loss_dfs_list (list) : a list of dataframes for each sample.
+
+        :return:
+            by_loss_func_dfs (list) : a list of dataframes for each loss function.
+        """
+        result_dfs = []
+
+        for col_idx in range(1):  # 열 인덱스 0부터 5까지
             sum_df = by_loss_dfs_list[0][col_idx].copy()
 
             for sample_idx in range(1, number_of_samples):

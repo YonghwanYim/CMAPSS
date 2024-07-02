@@ -8,8 +8,8 @@ class Environment:
     def __init__(self, data):
         self.environment = data
         self.max_unit_number = self.environment['unit_number'].max()
-        self.states = self.environment[['s_{}'.format(i) for i in range(1, 22)]] # if dummy column (s_0)? -> "for i in range(0, 22)"
-        self.lr_states = self.environment[['s_{}'.format(i) for i in range(0, 22)]]
+        self.states = self.environment[['s_{}'.format(i) for i in range(1, 22)]]    # if dummy column (s_0)? -> "for i in range(0, 22)"
+        self.lr_states = self.environment[['s_{}'.format(i) for i in range(0, 22)]] # TD loss로 linear regression 학습용 (상수항 w_0 추가)
 
     def nextStateIndex(self, action, current_index):
         # action에 따라 next state가 달라짐.
@@ -38,8 +38,11 @@ class Agent:
         # Linear Function Approximation (value-based)
         self.weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions}
         self.best_weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions} # for save best weight
-        self.lr_weights_by_td = (np.random.normal(loc=0, scale=0.5, size=22))
+        self.lr_weights_by_td_21 = (np.random.normal(loc=0, scale=0.5, size=21)) # w_continue에 대응되는 weight (RL과 성능 같은지 확인용)
+        self.lr_weights_by_td = (np.random.normal(loc=0, scale=0.5, size=22)) # w_continue에 대응되는 weight
         self.lr_best_weights = {action: np.random.normal(loc=0, scale=0.5, size=22) for action in actions} # 상수항까지 포함해서 22.
+        self.lr_best_weights_21 = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in
+                                actions}  # 상수 없이 21개.
 
     def get_weights(self):
         return self.weights
@@ -59,6 +62,9 @@ class Agent:
 
     def update_lr_weights_by_gradient(self, gradient, learning_rate):
         self.lr_weights_by_td = self.lr_weights_by_td - learning_rate * gradient
+
+    def update_lr_weights_by_gradient_21(self, gradient, learning_rate):
+        self.lr_weights_by_td_21 = self.lr_weights_by_td_21 - learning_rate * gradient
 
 
 
