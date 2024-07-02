@@ -1378,7 +1378,7 @@ class RunSimulation():
         # replace action에 대한 q-value는 0으로 고정이므로, 이를 threshold로 보면 됨.
         # Q_continue <= Q_replace (0)일 때 replace를 하므로.
 
-        with open('LR_TD_weight_by_RL_code_alpha_09.pkl', 'rb') as f:
+        with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
             self.td_weight = pickle.load(f)
 
         full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
@@ -1605,7 +1605,7 @@ class RunSimulation():
         with open('average_by_loss_dfs.pkl', 'rb') as f:
             average_by_loss_dfs = pickle.load(f)
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels, False)
-        with open('LR_TD_weight_by_RL_code_alpha_09.pkl', 'rb') as f:
+        with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
             self.agent.lr_best_weights_21['continue'] = pickle.load(f)
         self.agent.lr_best_weights_21['replace'] = np.zeros(21) # constant 없이 21차원.
         print(self.agent.lr_best_weights)
@@ -1690,7 +1690,7 @@ Linear Regression Simulation
 
 # MSE만 사용해서 LR 시뮬레이션 하는 코드. 다른 loss function들은 이제 필요 없음.
 #run_sim.run_many_only_MSE()
-run_sim.plot_lr_td_loss_to_RUL_all_samples_21(1) # RUl prediction plot
+#run_sim.plot_lr_td_loss_to_RUL_all_samples_21(1) # RUl prediction plot
 #run_sim.plot_results() # plot 그리는 코드 (퍼포먼스 비교용)
 
 """ #################################
@@ -1715,7 +1715,7 @@ Reinforcement Learning (value-based)
 
 # 21차원으로 학습시키는 코드, 테스트
 #run_sim.train_many_lr_by_td_loss_21()
-#run_sim.run_TD_loss_simulation_21()
+run_sim.run_TD_loss_simulation_21()
 
 
 """ RUL prediction by Q-value"""
