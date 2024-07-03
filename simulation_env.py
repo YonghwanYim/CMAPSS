@@ -770,6 +770,9 @@ class SimulationEnvironment():
         points = [(159.90, 0.0125), (161.2544, 0.0139), (178.56, 0.046), (193.5445, 0.271), (195.644, 0.4529), (160.411, 0.0135)]
         labels = ['alpha 1.0 (lambda : 6.957364)', 'alpha 0.9', 'alpha 0.5', 'alpha 0.1', 'alpha 0.0', 'Optimal of MSE (lambda : 6.991415)']
 
+        #points = [(159.90, 0.0125), (160.411, 0.0135)]
+        #labels = ['Optimal policy of RL (lambda : 6.957364)', 'Optimal of MSE (lambda : 6.991415)']
+
         for i, (point, label) in enumerate(zip(points, labels)):
             ax.plot(point[0], point[1], marker='o', markersize=6, label=label, color='C{}'.format(i))  # each point
             #ax.plot(point[0], point[1], marker='o', markersize=6, color='C{}'.format(i))
@@ -919,6 +922,10 @@ class SimulationEnvironment():
 
         fig, ax = plt.subplots(figsize=(6, 6))
 
+        # Initialize variables to store the minimum actual cost per usage time
+        min_actual_cost_per_usage_time = float('inf')
+        min_point = None
+
         # Loop through the dataframes and plot scatter points with different colors
         for i, by_loss_df in enumerate(by_loss_dfs):
             # Divide by 'max_engine' to get the failure rate
@@ -933,6 +940,36 @@ class SimulationEnvironment():
                 color=colors[i],
                 alpha=0.5
             )
+
+            # Calculate actual cost per usage time
+            actual_cost_per_usage_time = actual_cost / by_loss_df['Average usage time']
+
+            # Find the minimum actual cost per usage time
+            min_index = np.argmin(actual_cost_per_usage_time)
+            min_cost = actual_cost_per_usage_time[min_index]
+
+            if min_cost < min_actual_cost_per_usage_time:
+                min_actual_cost_per_usage_time = min_cost
+                min_point = (by_loss_df['Average usage time'].iloc[min_index], actual_cost.iloc[min_index])
+
+        # Plot the minimum point
+        if min_point:
+            ax.plot(min_point[0], min_point[1], 'ro', label='Minimum cost per time (MSE)')
+
+            # Calculate slope of the line connecting the origin and the min point
+            slope = min_point[1] / min_point[0]
+
+            # Plot line connecting origin and min point
+            x_vals = np.array([0, 200])
+            # x_vals = np.linspace(0, min_point[0], 100)
+            y_vals = slope * x_vals
+            ax.plot(x_vals, y_vals, 'r--', label=f'Lambda: {slope:.7f}')
+
+            # Print coordinates of the min point and slope
+            min_text = f"({min_point[0]:.3f}, {min_point[1]:.3f})"
+            ax.text(min_point[0], min_point[1], min_text, verticalalignment='bottom', horizontalalignment='right')
+
+
 
         # Set labels and title based on dataset number
         dataset_name = f"Dataset {dataset_number}"

@@ -1691,7 +1691,7 @@ Linear Regression Simulation
 # MSE만 사용해서 LR 시뮬레이션 하는 코드. 다른 loss function들은 이제 필요 없음.
 #run_sim.run_many_only_MSE()
 #run_sim.plot_lr_td_loss_to_RUL_all_samples_21(1) # RUl prediction plot
-#run_sim.plot_results() # plot 그리는 코드 (퍼포먼스 비교용)
+run_sim.plot_results() # plot 그리는 코드 (퍼포먼스 비교용)
 
 """ #################################
 Reinforcement Learning (value-based)
@@ -1715,7 +1715,7 @@ Reinforcement Learning (value-based)
 
 # 21차원으로 학습시키는 코드, 테스트
 #run_sim.train_many_lr_by_td_loss_21()
-run_sim.run_TD_loss_simulation_21()
+#run_sim.run_TD_loss_simulation_21()
 
 
 """ RUL prediction by Q-value"""
