@@ -291,8 +291,8 @@ class RunSimulation():
     def train_lr_by_td_loss_random_observation(self, data_sample_index, epoch, alpha, beta, learning_rate):
         # random observation임을 고려해서 td가 실제 흘러간 타임스탭만큼 들어가는 코드.
         # Q-learning (off-policy TD(0)와 equivalent한 update)
-        # 이 코드는 RL처럼 매 스탭마다 weight을 업데이트 함. (action은 계속 continue 하는 버전)
-        # 2024.07.01 새롭게 정의한 td loss로 수정.
+        # 이 코드는 RL처럼 매 스탭마다 weight을 업데이트( 함. (action은 계속 continue 하는 버전)
+        # 2024.07.16 새롭게 정의한 td loss로 수정. (threshold 반영)
         state_index = 0
         num_of_step = 0
         sum_of_gradient = 0
@@ -348,10 +348,15 @@ class RunSimulation():
 
                 # t = tau_i 일 때는 다음과 같이 gradient를 업데이트 (time cycle이 엔진 내의 마지막 time cycle일 때. 즉 continue 하면 failure 하는 상태)
                 if current_reward == (self.reward.r_continue_but_failure):
+                    #gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
+                    #                                           state_index] - WX_t) * current_state - 2 * self.td_alpha * (
+                    #                       -(1 / self.td_beta) - WX_t) * current_state
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                state_index] - WX_t) * current_state - 2 * self.td_alpha * (
-                                           -(1 / self.td_beta) - WX_t) * current_state
+                                       -(1 / self.td_beta) - WX_t + self.td_simulation_threshold) * current_state
+
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate) # gradient descent
+
 
 
                 # t가 '1 <= t < tau_i' 인 경우에는 아래와 같이 gradient를 업데이트 (엔진 내에서 마지막 time cycle이 아닐 때)
@@ -359,16 +364,21 @@ class RunSimulation():
                     time_difference = RL_env.environment['time_cycles'].iloc[next_state_index] - \
                                       RL_env.environment['time_cycles'].iloc[state_index]
 
+                    #gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
+                    #                                           state_index] - WX_t) * current_state - 2 * self.td_alpha * (
+                    #                       time_difference + max(WX_t_1, 0) - WX_t) * current_state
+
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                state_index] - WX_t) * current_state - 2 * self.td_alpha * (
-                                           time_difference + max(WX_t_1, 0) - WX_t) * current_state
+                                       time_difference + max(WX_t_1 - self.td_simulation_threshold,
+                                                             0) - WX_t + self.td_simulation_threshold) * current_state
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate) # gradient descent
 
                 # 다음 상태로 이동
                 state_index = next_state_index
 
                 #22차원용 코드
-                #state = RL_env.lr_states.iloc[state_index].values
+                state = RL_env.lr_states.iloc[state_index].values
 
                 num_of_step += 1
 
@@ -1357,7 +1367,8 @@ class RunSimulation():
         # replace action에 대한 q-value는 0으로 고정이므로, 이를 threshold로 보면 됨.
         # Q_continue <= Q_replace (0)일 때 replace를 하므로.
 
-        with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
+        #with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
+        with open('LR_TD_weight_by_RL_code_22dim_threshold_0.pkl', 'rb') as f:
             self.td_weight = pickle.load(f)
 
         full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
@@ -1367,7 +1378,7 @@ class RunSimulation():
 
         full_data.reset_index(drop=True, inplace=True)
 
-        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale)
+        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, 0)
 
     def plot_lr_td_loss_to_RUL_all_samples(self, scale):
         for i in range(self.num_sample_datasets):
@@ -1690,7 +1701,8 @@ Linear Regression Simulation
 
 # MSE만 사용해서 LR 시뮬레이션 하는 코드. 다른 loss function들은 이제 필요 없음.
 #run_sim.run_many_only_MSE()
-#run_sim.plot_lr_td_loss_to_RUL_all_samples_21(1) # RUl prediction plot
+#run_sim.plot_lr_td_loss_to_RUL_all_samples_21(1) # RUl prediction plot (21차원용)
+#run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 #run_sim.plot_results() # plot 그리는 코드 (퍼포먼스 비교용)
 
 """ #################################
@@ -1709,13 +1721,13 @@ Reinforcement Learning (value-based)
 
 
 """ RL 코드를 기반으로 한, TD loss로 Linear regression 학습. """
-#run_sim.train_many_lr_by_td_loss()
+run_sim.train_many_lr_by_td_loss()
 #run_sim.train_continue_many_lr_by_td_loss()   # 이미 학습된 weight을 이어서 학습시킬 때 사용.
-#run_sim.run_TD_loss_simulation()              # 학습 결과 시뮬레이션.
+run_sim.run_TD_loss_simulation()              # 학습 결과 시뮬레이션.
 
 # 21차원으로 학습시키는 코드, 테스트
-run_sim.train_many_lr_by_td_loss_21()
-run_sim.run_TD_loss_simulation_21()
+#run_sim.train_many_lr_by_td_loss_21()
+#run_sim.run_TD_loss_simulation_21()
 
 
 """ RUL prediction by Q-value"""

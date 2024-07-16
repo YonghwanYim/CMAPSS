@@ -207,7 +207,7 @@ class SimulationEnvironment():
         #plt.ylim(-50, 200)
         plt.show()
 
-    def plot_RUL_prediction_by_lr_td_loss(self, environment, weights, scale):
+    def plot_RUL_prediction_by_lr_td_loss(self, environment, weights, scale, threshold):
 
         # Calculate predicted RUL by multiplying 's_0' to 's_21' columns with weights_by_RL for all rows
         predicted_RUL = np.dot(environment.iloc[:, 5:27], weights)
@@ -229,8 +229,8 @@ class SimulationEnvironment():
             #ax.plot(group['RUL'], group['predicted_RUL_by_Q'], label=f'Unit {unit}')
             ax.plot(group['RUL'], group['predicted_RUL'])
 
-        # Draw a red dashed line at y=0
-        ax.axhline(y=0, color='r', linestyle='--', label='threshold (0)')
+        # Draw a red dashed line at y=threshold
+        ax.axhline(y=threshold, color='r', linestyle='--', label='threshold')
 
         ax.set_xlabel('Remaining Useful Life')
         ax.set_ylabel('Predicted RUL')
@@ -239,10 +239,11 @@ class SimulationEnvironment():
 
         # Plot settings
         plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
+        plt.ylim(-350, 400)
         #plt.ylim(-50, 200)
         plt.show()
 
-    def plot_RUL_prediction_by_lr_td_loss_21(self, environment, weights, scale):
+    def plot_RUL_prediction_by_lr_td_loss_21(self, environment, weights, scale, threshold):
 
         # Calculate predicted RUL by multiplying 's_0' to 's_21' columns with weights_by_RL for all rows
         predicted_RUL = np.dot(environment.iloc[:, 5:26], weights)
@@ -264,8 +265,8 @@ class SimulationEnvironment():
             #ax.plot(group['RUL'], group['predicted_RUL_by_Q'], label=f'Unit {unit}')
             ax.plot(group['RUL'], group['predicted_RUL'])
 
-        # Draw a red dashed line at y=0
-        ax.axhline(y=0, color='r', linestyle='--', label='threshold (0)')
+        # Draw a red dashed line at y=threshold
+        ax.axhline(y=threshold, color='r', linestyle='--', label='threshold')
 
         ax.set_xlabel('Remaining Useful Life')
         ax.set_ylabel('Predicted RUL')
@@ -274,7 +275,7 @@ class SimulationEnvironment():
 
         # Plot settings
         plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
-        plt.ylim(-350, 350)
+        plt.ylim(-350, 400)
         plt.show()
 
 
