@@ -445,7 +445,7 @@ class RunSimulation():
                 if current_reward == (self.reward.r_continue_but_failure):
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                state_index] - WX_t) * current_state - 2 * self.td_alpha * (
-                                       -(1 / self.td_beta) - WX_t) * current_state
+                                       -(1 / self.td_beta) - WX_t +self.td_simulation_threshold) * current_state
                     self.agent.update_lr_weights_by_gradient_21(gradient, learning_rate)  # gradient descent
 
 
@@ -456,7 +456,7 @@ class RunSimulation():
 
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                state_index] - WX_t) * current_state - 2 * self.td_alpha * (
-                                       time_difference + max(WX_t_1, 0) - WX_t) * current_state
+                                       time_difference + max(WX_t_1 - self.td_simulation_threshold, 0) - WX_t + self.td_simulation_threshold) * current_state
                     self.agent.update_lr_weights_by_gradient_21(gradient, learning_rate)  # gradient descent
 
                 # 다음 상태로 이동
@@ -1691,7 +1691,7 @@ Linear Regression Simulation
 # MSE만 사용해서 LR 시뮬레이션 하는 코드. 다른 loss function들은 이제 필요 없음.
 #run_sim.run_many_only_MSE()
 #run_sim.plot_lr_td_loss_to_RUL_all_samples_21(1) # RUl prediction plot
-run_sim.plot_results() # plot 그리는 코드 (퍼포먼스 비교용)
+#run_sim.plot_results() # plot 그리는 코드 (퍼포먼스 비교용)
 
 """ #################################
 Reinforcement Learning (value-based)
@@ -1714,8 +1714,8 @@ Reinforcement Learning (value-based)
 #run_sim.run_TD_loss_simulation()              # 학습 결과 시뮬레이션.
 
 # 21차원으로 학습시키는 코드, 테스트
-#run_sim.train_many_lr_by_td_loss_21()
-#run_sim.run_TD_loss_simulation_21()
+run_sim.train_many_lr_by_td_loss_21()
+run_sim.run_TD_loss_simulation_21()
 
 
 """ RUL prediction by Q-value"""
