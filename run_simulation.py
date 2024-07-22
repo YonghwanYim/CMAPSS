@@ -1368,7 +1368,7 @@ class RunSimulation():
         # Q_continue <= Q_replace (0)일 때 replace를 하므로.
 
         #with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
-        with open('LR_TD_weight_by_RL_code_22dim_threshold_0.pkl', 'rb') as f:
+        with open('LR_TD_weight_by_RL_code_22dim_alpha_05_threshold_20_1370_.pkl', 'rb') as f:
             self.td_weight = pickle.load(f)
 
         full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
@@ -1378,7 +1378,7 @@ class RunSimulation():
 
         full_data.reset_index(drop=True, inplace=True)
 
-        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, 0)
+        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, 20)
 
     def plot_lr_td_loss_to_RUL_all_samples(self, scale):
         for i in range(self.num_sample_datasets):
@@ -1702,7 +1702,7 @@ Linear Regression Simulation
 # MSE만 사용해서 LR 시뮬레이션 하는 코드. 다른 loss function들은 이제 필요 없음.
 #run_sim.run_many_only_MSE()
 #run_sim.plot_lr_td_loss_to_RUL_all_samples_21(1) # RUl prediction plot (21차원용)
-#run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
+run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 #run_sim.plot_results() # plot 그리는 코드 (퍼포먼스 비교용)
 
 """ #################################
@@ -1721,9 +1721,9 @@ Reinforcement Learning (value-based)
 
 
 """ RL 코드를 기반으로 한, TD loss로 Linear regression 학습. """
-run_sim.train_many_lr_by_td_loss()
+#run_sim.train_many_lr_by_td_loss()
 #run_sim.train_continue_many_lr_by_td_loss()   # 이미 학습된 weight을 이어서 학습시킬 때 사용.
-run_sim.run_TD_loss_simulation()              # 학습 결과 시뮬레이션.
+#run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
 
 # 21차원으로 학습시키는 코드, 테스트
 #run_sim.train_many_lr_by_td_loss_21()
