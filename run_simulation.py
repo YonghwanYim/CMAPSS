@@ -599,7 +599,7 @@ class RunSimulation():
 
         # Iterate over the number of sample datasets
         for epoch in range(self.max_epoch):
-            print(epoch + 1)
+            print(f"Epoch: {epoch + 1}, Theta: {self.agent.theta}")
 
             # Iterate over the number of sample datasets
             for i in range(self.num_sample_datasets):
