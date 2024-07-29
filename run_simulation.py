@@ -361,9 +361,6 @@ class RunSimulation():
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate) # gradient descent for w
                     self.agent.update_theta(gradient_theta, learning_rate)            # gradient descent for theta
 
-
-
-                # t가 '1 <= t < tau_i' 인 경우에는 아래와 같이 gradient를 업데이트 (엔진 내에서 마지막 time cycle이 아닐 때)
                 else:
                     time_difference = RL_env.environment['time_cycles'].iloc[next_state_index] - \
                                       RL_env.environment['time_cycles'].iloc[state_index]
@@ -379,6 +376,28 @@ class RunSimulation():
                     # update w, theta
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate)  # gradient descent for w
                     self.agent.update_theta(gradient_theta, learning_rate)             # gradient descent for theta
+                """
+                # theta의 gradient를 구할때, w처럼 상수 취급을 하지 않고 max를 푼 버전.
+                else:
+                    time_difference = RL_env.environment['time_cycles'].iloc[next_state_index] - \
+                                      RL_env.environment['time_cycles'].iloc[state_index]
+
+                    # weights의 gradient
+                    gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
+                                                               state_index] - WX_t) * current_state - 2 * self.td_alpha * (
+                                       time_difference + max(WX_t_1 - self.agent.theta,
+                                                             0) - WX_t + self.agent.theta) * current_state
+
+                    # theta의 gradient (max operator를 풀기 위해 범위를 나눔)
+                    if WX_t_1 - self.agent.theta < 0:
+                        gradient_theta = 2 * self.td_alpha * (time_difference - WX_t + self.agent.theta)
+                    else:
+                        gradient_theta = 0
+
+                    # update w, theta
+                    self.agent.update_lr_weights_by_gradient(gradient, learning_rate)  # gradient descent for w
+                    self.agent.update_theta(gradient_theta, learning_rate)  # gradient descent for theta
+                """
 
                 # 다음 상태로 이동
                 state_index = next_state_index
@@ -1503,8 +1522,12 @@ class RunSimulation():
         # Q_continue <= Q_replace (0)일 때 replace를 하므로.
 
         #with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
-        with open('LR_TD_weight_by_RL_code_22dim_alpha_05_threshold_20_1370_.pkl', 'rb') as f:
-            self.td_weight = pickle.load(f)
+            #self.td_weight = pickle.load(f)
+
+        with open('LR_TD_weight_and_theta.pkl', 'rb') as f:
+            data = pickle.load(f)
+        self.td_weight = data['lr_weights_by_td']
+        threshold = data['theta']
 
         full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
         full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
@@ -1513,7 +1536,9 @@ class RunSimulation():
 
         full_data.reset_index(drop=True, inplace=True)
 
-        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, 20)
+        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, threshold)
+        #self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, 20)
+
 
     def plot_lr_td_loss_to_RUL_all_samples(self, scale):
         for i in range(self.num_sample_datasets):
@@ -1706,7 +1731,7 @@ class RunSimulation():
         # save the learning results to a global variable
         full_by_loss_dfs_list.append(full_by_loss_dfs)
 
-    def run_TD_loss_simulation_theta(self):
+    def run_TD_loss_simulation_theta(self, custom_threshold):
         global test_average_rewards, test_average_usage_times, test_replace_failures
         # 이 method는 학습이 완료된 bestweight을 불러와서 테스트 환경에서 실행.
         # 아마도 continue의 reward에 따른 다양한 RL 학습 결과를 테스트 환경에서 실행 후 하나의 plot에 점을 찍어내야 함.
@@ -1715,13 +1740,18 @@ class RunSimulation():
         with open('average_by_loss_dfs.pkl', 'rb') as f:
             average_by_loss_dfs = pickle.load(f)
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels, False)
-        with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
-            self.agent.lr_best_weights['continue'] = pickle.load(f)
-        with open('LR_TD_weight_and_theta_by_RL_code.pkl', 'rb') as f:
+        with open('LR_TD_weight_and_theta.pkl', 'rb') as f:
             data = pickle.load(f)
         self.agent.lr_best_weights['continue'] = data['lr_weights_by_td'] # continue에 대한 weight.
         self.agent.lr_best_weights['replace'] = np.zeros(22)              # constant 항까지 포함됨 (22-dim)
-        self.agent.theta = data['theta']                                  # 학습된 theta를 load
+
+        if custom_threshold == True:    # 테스트용 theta 사용 (config 파일로)
+            self.agent.theta = self.td_simulation_threshold
+        elif custom_threshold == False: # 학습된 theta 사용
+            self.agent.theta = data['theta']
+
+
+
         print(self.agent.lr_best_weights)
         print(self.agent.theta)
 
@@ -1904,8 +1934,11 @@ Reinforcement Learning (value-based)
 
 # theta도 함께 학습
 run_sim.train_many_lr_by_td_loss_theta()
-run_sim.run_TD_loss_simulation_theta()
+run_sim.run_TD_loss_simulation_theta(False) # 학습된 threshold로 성능 테스트
+#run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
 
+# RUL prediction
+#run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 
 # 21차원으로 학습시키는 코드, 테스트
 #run_sim.train_many_lr_by_td_loss_21()

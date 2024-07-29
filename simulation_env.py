@@ -232,6 +232,11 @@ class SimulationEnvironment():
         # Draw a red dashed line at y=threshold
         ax.axhline(y=threshold, color='r', linestyle='--', label='threshold')
 
+        # Plot a purple dashed line with slope -45 degrees passing through (0, 0)
+        x_vals = np.linspace(0, 350, 100)  # x-values from -350 to 0
+        y_vals = x_vals  # y-values corresponding to y = x
+        ax.plot(x_vals, y_vals, 'b--', linewidth=2, label='y = x')  # Plot purple dashed line
+
         ax.set_xlabel('Remaining Useful Life')
         ax.set_ylabel('Predicted RUL')
         ax.set_title('Predicted RUL by Unit Number')
