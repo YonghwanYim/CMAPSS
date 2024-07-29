@@ -43,6 +43,7 @@ class Agent:
         self.lr_best_weights = {action: np.random.normal(loc=0, scale=0.5, size=22) for action in actions} # 상수항까지 포함해서 22.
         self.lr_best_weights_21 = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in
                                 actions}  # 상수 없이 21개.
+        self.theta = 0 # 초기에 theta는 0에서 시작.
 
     def get_weights(self):
         return self.weights
@@ -60,11 +61,14 @@ class Agent:
     def save_best_weights(self, best_weights):
         self.best_weights = best_weights
 
-    def update_lr_weights_by_gradient(self, gradient, learning_rate):
-        self.lr_weights_by_td = self.lr_weights_by_td - learning_rate * gradient
+    def update_lr_weights_by_gradient(self, gradient_weight, learning_rate):
+        self.lr_weights_by_td = self.lr_weights_by_td - learning_rate * gradient_weight
 
-    def update_lr_weights_by_gradient_21(self, gradient, learning_rate):
-        self.lr_weights_by_td_21 = self.lr_weights_by_td_21 - learning_rate * gradient
+    def update_lr_weights_by_gradient_21(self, gradient_weight, learning_rate):
+        self.lr_weights_by_td_21 = self.lr_weights_by_td_21 - learning_rate * gradient_weight
+
+    def update_theta(self, gradient_theta, learning_rate):
+        self.theta = self.theta - learning_rate * gradient_theta
 
 
 
