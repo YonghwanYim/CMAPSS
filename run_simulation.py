@@ -1563,15 +1563,15 @@ class RunSimulation():
         # scale = 1이 default.
 
         # theta가 학습 대상이 아닐 때 code.
-        with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
-            self.td_weight = pickle.load(f)
-        threshold = self.td_simulation_threshold
+        #with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
+        #    self.td_weight = pickle.load(f)
+        #threshold = self.td_simulation_threshold
 
         # theta도 함께 학습시킬 때 code (theta를 gradient descent로 구할 때).
-        # with open('LR_TD_weight_and_theta.pkl', 'rb') as f:
-        #    data = pickle.load(f)
-        # self.td_weight = data['lr_weights_by_td']
-        # threshold = data['theta']
+        with open('LR_TD_weight_and_theta.pkl', 'rb') as f:
+            data = pickle.load(f)
+        self.td_weight = data['lr_weights_by_td']
+        threshold = data['theta']
 
         full_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()
         full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
@@ -1784,7 +1784,7 @@ class RunSimulation():
         with open('average_by_loss_dfs.pkl', 'rb') as f:
             average_by_loss_dfs = pickle.load(f)
         self.env.plot_simulation_results_scale_up(average_by_loss_dfs, self.num_dataset, self.loss_labels, False)
-        with open('LR_TD_weight_and_theta_alpha_01.pkl', 'rb') as f:
+        with open('LR_TD_weight_and_theta.pkl', 'rb') as f:
             data = pickle.load(f)
         self.agent.lr_best_weights['continue'] = data['lr_weights_by_td']  # continue에 대한 weight.
         self.agent.lr_best_weights['replace'] = np.zeros(22)  # constant 항까지 포함됨 (22-dim)
@@ -2049,12 +2049,12 @@ Reinforcement Learning (value-based)
 # run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
 
 # theta도 함께 학습
-run_sim.train_many_lr_by_td_loss_theta()
+#run_sim.train_many_lr_by_td_loss_theta()
 run_sim.run_TD_loss_simulation_theta(False) # 학습된 threshold로 성능 테스트
 # run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
 
 # RUL prediction
-# run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
+#run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 
 
 # MSE가 최소가 되는 threshold 찾기.
