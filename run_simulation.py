@@ -73,6 +73,7 @@ class RunSimulation():
         self.td_weight_21 = np.random.normal(loc=0, scale=0.5, size=21)  # RL과 weight 크기 맞춰서 비교하기 위함.
 
         self.td_simulation_threshold = float(config['SimulationSettings']['td_simulation_threshold'])
+        self.is_crucial_moment = bool(config['SimulationSettings']['is_crucial_moment'])
 
         # constant of simulation
         self.threshold_start = int(config['SimulationSettings']['threshold_start'])
@@ -302,6 +303,11 @@ class RunSimulation():
         train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
         train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
 
+        # crucial moment 적용을 위해 RUL이 crucial moment보다 적게 남은 데이터만 필터링함.
+        # default = False 임. 학습된 theta가 어떻게 바뀌는지 실험하기 위해 넣은 기능.
+        if self.is_crucial_moment == True :
+            train_data = train_data[train_data['RUL'] <= self.td_crucial_moment]
+
         # dummy row 추가 (마지막 row를 2번 복사해서 뒤에 추가)
         dummy_row = train_data.iloc[-1].copy()
         dummy_row['unit_number'] = int(dummy_row['unit_number']) + 1
@@ -350,13 +356,14 @@ class RunSimulation():
                 # t = tau_i 일 때는 다음과 같이 gradient를 업데이트 (time cycle이 엔진 내의 마지막 time cycle일 때. 즉 continue 하면 failure 하는 상태)
                 if current_reward == (self.reward.r_continue_but_failure):
 
-                    """ decision term에 theta를 넣었을 때의 gradient
+                    # decision term에 theta를 넣었을 때의 gradient (TD loss - back; original)
                     # weights의 gradient
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                state_index] - WX_t) * current_state - 2 * self.td_alpha * (
                                        -(1 / self.td_beta) - WX_t + self.agent.theta) * current_state
                     # theta의 gradient
                     gradient_theta = 2 * self.td_alpha * (-(1 / self.td_beta) - WX_t + self.agent.theta)
+
                     """
                     # prediction term에 theta를 넣었을 때의 gradient
                     # weights의 gradient
@@ -366,6 +373,7 @@ class RunSimulation():
                     # theta의 gradient
                     gradient_theta = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                      state_index] - WX_t - self.agent.theta)
+                    """
 
                     # update w, theta
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate)  # gradient descent for w
@@ -375,7 +383,7 @@ class RunSimulation():
                     time_difference = RL_env.environment['time_cycles'].iloc[next_state_index] - \
                                       RL_env.environment['time_cycles'].iloc[state_index]
 
-                    """ decision term에 theta를 넣었을 때의 gradient
+                    # decision term에 theta를 넣었을 때의 gradient (TD loss - back; original)
                     # weights의 gradient
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                state_index] - WX_t) * current_state - 2 * self.td_alpha * (
@@ -384,8 +392,8 @@ class RunSimulation():
                     # theta의 gradient
                     gradient_theta = 2 * self.td_alpha * (
                                 time_difference + max(WX_t_1 - self.agent.theta, 0) - WX_t + self.agent.theta)
-                    """
 
+                    """
                     # prediction term에 theta를 넣었을 때의 gradient
                     # weights의 gradient
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
@@ -395,6 +403,7 @@ class RunSimulation():
                     # theta의 gradient
                     gradient_theta = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                      state_index] - WX_t - self.agent.theta)
+                    """
 
                     # update w, theta
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate)  # gradient descent for w
@@ -2010,6 +2019,41 @@ class RunSimulation():
                  horizontalalignment='center', color='red')
         plt.show()
 
+    def calculate_MSE_weight_by_td_loss(self):
+        # td-loss로 학습된 weight으로 (22-dim; alpha = 1) MSE를 minimize 하는 threshold (theta)를 찾기 위한 method.
+        # LR_TD_weight_by_RL_code_alpha_1 : decision-aware (q-learning) part만 고려해서 학습시킨 weight (threshold = 0 고정)
+        with open('LR_TD_weight_and_theta.pkl', 'rb') as f:
+            data = pickle.load(f)
+
+        self.td_weight = data['lr_weights_by_td'] # dictionary에서 td weight만 빼옴 (학습된 threshold도 저장되어있음.)
+
+        # 모든 샘플 데이터들을 합쳐서 하나의 데이터 셋으로 만들어서 MSE 측정.
+        # 아마 예전에 짜둔 코드가 있을테니 확인해보자.
+        combined_data = pd.DataFrame()
+
+        for i in range(self.num_sample_datasets):
+            # train dataset으로 하려면 2번 째 index를 바꿔주면 됨. (full data는 2)
+            sample_data = self.sampled_datasets_with_RUL[i][2].copy()  # full data (test)
+            # sample_data = self.sampled_datasets_with_RUL[i][0].copy()   # train data
+            combined_data = pd.concat([combined_data, sample_data], ignore_index=True)
+
+        combined_data[self.columns_to_scale] = combined_data[self.columns_to_scale].apply(
+            self.env.min_max_scaling, axis=0)
+        # min-max scaling 마친 데이터에 s_0 열을 추가 (s_1 왼쪽에)하고 모든 값을 1로 초기화.
+        combined_data.insert(loc=combined_data.columns.get_loc('s_1'), column='s_0', value=1)
+        combined_data.reset_index(drop=True, inplace=True)  # index reset
+
+        selected_data = combined_data.iloc[:, 5:27]  # only s_0, ~ s_21 column
+
+        # Add the predicted_RUL column.
+        self.td_weight = np.array(self.td_weight)
+        # Compute the dot product for each row
+        selected_data['predicted_RUL'] = selected_data.apply(lambda row: np.dot(row, self.td_weight), axis=1)
+        selected_data['actual_RUL'] = combined_data['RUL']  # predicted RUL의 오른쪽에 actual RUL column 추가.
+        selected_data = selected_data.iloc[:, 22:24]  # predicted_RUL과 actual RUL만 남김 (불필요한 col 제거).
+
+        mse = ((selected_data['actual_RUL'] - selected_data['predicted_RUL']) ** 2).mean()
+        print(mse)
 
 
 
@@ -2049,12 +2093,15 @@ Reinforcement Learning (value-based)
 # run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
 
 # theta도 함께 학습
-run_sim.train_many_lr_by_td_loss_theta()
-run_sim.run_TD_loss_simulation_theta(False) # 학습된 threshold로 성능 테스트
-# run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
+#run_sim.train_many_lr_by_td_loss_theta()
+#run_sim.run_TD_loss_simulation_theta(False) # 학습된 threshold로 성능 테스트
+run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
+
+# 학습된 weight으로 MSE 계산
+#run_sim.calculate_MSE_weight_by_td_loss()
 
 # RUL prediction
-run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
+#run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 
 
 # MSE가 최소가 되는 threshold 찾기.
@@ -2065,16 +2112,6 @@ run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 # run_sim.run_TD_loss_simulation_21()
 
 
-""" RUL prediction by Q-value"""
-"""
-beta_C_scale = 1 / 12.87
-average_reward_scale = 1 / 11.2902
-print(beta_C_scale)
-#print(average_reward_scale)
-run_sim.plot_Q_value_to_RUL_all_samples(beta_C_scale)
-#run_sim.plot_Q_value_to_RUL_all_samples(average_reward_scale)
-"""
-
 # TD Loss 학습 코드.
 """
 run_sim.train_many_lr_by_DA_TD_loss()
@@ -2084,4 +2121,3 @@ run_sim.train_many_lr_by_DA_TD_loss()
 run_sim.run_TD_loss_simulation()
 run_sim.plot_lr_td_loss_to_RUL_all_samples(1)
 """
-

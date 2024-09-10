@@ -211,7 +211,6 @@ class SimulationEnvironment():
 
         # Calculate predicted RUL by multiplying 's_0' to 's_21' columns with weights_by_RL for all rows
         predicted_RUL = np.dot(environment.iloc[:, 5:27], weights)
-        print(environment)
 
         # Apply scale to predicted RUL values
         predicted_RUL *= scale
