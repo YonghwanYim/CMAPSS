@@ -2093,15 +2093,15 @@ Reinforcement Learning (value-based)
 # run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
 
 # theta도 함께 학습
-#run_sim.train_many_lr_by_td_loss_theta()
-#run_sim.run_TD_loss_simulation_theta(False) # 학습된 threshold로 성능 테스트
-run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
+run_sim.train_many_lr_by_td_loss_theta()
+run_sim.run_TD_loss_simulation_theta(False) # 학습된 threshold로 성능 테스트
+#run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
 
 # 학습된 weight으로 MSE 계산
-#run_sim.calculate_MSE_weight_by_td_loss()
+run_sim.calculate_MSE_weight_by_td_loss()
 
 # RUL prediction
-#run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
+run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 
 
 # MSE가 최소가 되는 threshold 찾기.
