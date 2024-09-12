@@ -2,8 +2,10 @@
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 import configparser
+# for deep learning
 import tensorflow as tf
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers, models, initializers
+from tensorflow.keras.callbacks import LearningRateScheduler
 import numpy as np
 import pandas as pd
 import pickle  # it is suitable for saving Python objects.
@@ -22,6 +24,7 @@ from loss_td import DecisionAwareTD
 from RL_component import Environment
 from RL_component import Rewards
 from RL_component import Agent
+
 
 # Filter out the warning
 warnings.filterwarnings("ignore",
@@ -88,18 +91,30 @@ class RunSimulation():
         self.REWARD_ACTUAL_FAILURE = int(config['SimulationSettings']['REWARD_ACTUAL_FAILURE'])
         self.REWARD_ACTUAL_CONTINUE = int(config['SimulationSettings']['REWARD_ACTUAL_CONTINUE'])
 
-        # Hyperparameter for reinforcement learning
+        # Hyperparameter for reinforcement learning ###########################################################
         self.gamma = float(config['RL_Settings']['discount_factor'])
         self.alpha = float(config['RL_Settings']['learning_rate'])
         self.initial_epsilon = float(config['RL_Settings']['initial_epsilon'])
         self.epsilon_delta = float(config['RL_Settings']['epsilon_delta'])
         self.min_epsilon = float(config['RL_Settings']['min_epsilon'])
         self.max_episodes = int(config['RL_Settings']['max_episodes'])
-
         # RL
         self.columns_to_scale = ['s_1', 's_2', 's_3', 's_4', 's_5', 's_6', 's_7', 's_8', 's_9', 's_10', 's_11', 's_12',
                                  's_13', 's_14', 's_15', 's_16', 's_17', 's_18', 's_19', 's_20', 's_21']
         self.best_average_reward = -10000  # 처음에만 이렇게 초기화하고, 그 다음에는 알아서 반영.
+        ########################################################################################################
+
+        # Hyperparameter for DCNN ################################################################################
+        self.DCNN_N_tw = int(config['DCNN_Settings']['N_tw']) # Time sequence length (Time window)
+        self.DCNN_N_ft = int(config['DCNN_Settings']['N_ft']) # Number of features
+        self.DCNN_F_N = int(config['DCNN_Settings']['F_N'])   # Number of filters (each convolution layer)
+        self.DCNN_F_L = int(config['DCNN_Settings']['F_L'])   # Filter size (1D filter)
+        self.DCNN_batch_size = int(config['DCNN_Settings']['batch_size'])
+        self.DCNN_neurons_fc = int(config['DCNN_Settings']['neurons_fc']) # Neurons in fully-connected layer
+        self.DCNN_dropout_rate = float(config['DCNN_Settings']['dropout_rate'])
+        self.DCNN_epochs = int(config['DCNN_Settings']['epochs'])
+        ########################################################################################################
+
 
         # 사전에 정의된 stopping time에 따른 exploration을 위한 parameter
         self.min_t_replace = int(config['StoppingTime']['min_t_replace'])
@@ -118,6 +133,7 @@ class RunSimulation():
                                                            self.train_data, self.valid_data, self.full_data)
         # sampled_datasets에 RUL column 추가.
         self.sampled_datasets_with_RUL = self.env.add_RUL_column_to_sampled_datasets(self.sampled_datasets)
+
 
     def train_lr_by_DA_TD_loss(self, data_sample_index, alpha, beta, learning_rate):
         # 전체 데이터에 대해 gradient를 한번에 구하는 method (DecisionAwareTD 클래스에서 함수 정의에 따라 달라질 수 있음).
@@ -355,7 +371,7 @@ class RunSimulation():
 
                 # t = tau_i 일 때는 다음과 같이 gradient를 업데이트 (time cycle이 엔진 내의 마지막 time cycle일 때. 즉 continue 하면 failure 하는 상태)
                 if current_reward == (self.reward.r_continue_but_failure):
-
+                    """
                     # decision term에 theta를 넣었을 때의 gradient (TD loss - back; original)
                     # weights의 gradient
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
@@ -363,8 +379,9 @@ class RunSimulation():
                                        -(1 / self.td_beta) - WX_t + self.agent.theta) * current_state
                     # theta의 gradient
                     gradient_theta = 2 * self.td_alpha * (-(1 / self.td_beta) - WX_t + self.agent.theta)
-
                     """
+
+
                     # prediction term에 theta를 넣었을 때의 gradient
                     # weights의 gradient
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
@@ -373,7 +390,6 @@ class RunSimulation():
                     # theta의 gradient
                     gradient_theta = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                      state_index] - WX_t - self.agent.theta)
-                    """
 
                     # update w, theta
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate)  # gradient descent for w
@@ -383,6 +399,7 @@ class RunSimulation():
                     time_difference = RL_env.environment['time_cycles'].iloc[next_state_index] - \
                                       RL_env.environment['time_cycles'].iloc[state_index]
 
+                    """
                     # decision term에 theta를 넣었을 때의 gradient (TD loss - back; original)
                     # weights의 gradient
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
@@ -392,8 +409,11 @@ class RunSimulation():
                     # theta의 gradient
                     gradient_theta = 2 * self.td_alpha * (
                                 time_difference + max(WX_t_1 - self.agent.theta, 0) - WX_t + self.agent.theta)
-
+                    # 교수님 코드 (max 안에 있는 y^도 미분한다고 가정했을 때. 예전에 실험해본 결과 큰 차이 x)
+                    #gradient_theta = 2 * self.td_alpha * (
+                    #        time_difference + self.agent.theta - WX_t) if WX_t_1 < self.agent.theta else 0
                     """
+
                     # prediction term에 theta를 넣었을 때의 gradient
                     # weights의 gradient
                     gradient = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
@@ -403,7 +423,7 @@ class RunSimulation():
                     # theta의 gradient
                     gradient_theta = -2 * (1 - self.td_alpha) * (RL_env.environment['RUL'].iloc[
                                                                      state_index] - WX_t - self.agent.theta)
-                    """
+
 
                     # update w, theta
                     self.agent.update_lr_weights_by_gradient(gradient, learning_rate)  # gradient descent for w
@@ -2055,11 +2075,137 @@ class RunSimulation():
         mse = ((selected_data['actual_RUL'] - selected_data['predicted_RUL']) ** 2).mean()
         print(mse)
 
+    def generate_input_for_DCNN(self):
+        # Original DCNN 적용을 위한 dataset 생성 (1~70 train, 71~100 valid, 1~100 full).
+        # 사용하지 않는 센서 column 삭제 (DCNN paper).
+        self.drop_columns = ['s_1', 's_5', 's_6', 's_10', 's_16', 's_18', 's_19']
+        self.train_data_DCNN, self.valid_data_DCNN, self.full_data_DCNN = self.env.load_data(self.num_dataset, self.split_unit_number)
+
+        # 사용하지 않는 column 삭제 후, true label column 추가 (RUL)
+        self.train_data_DCNN = self.train_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.train_data_DCNN = self.env.add_RUL_column(self.train_data_DCNN)
+        self.valid_data_DCNN = self.valid_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.valid_data_DCNN = self.env.add_RUL_column(self.valid_data_DCNN)
+        self.full_data_DCNN = self.full_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
+
+        new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
+
+        print(self.train_data_DCNN)
+        #print(new_data)
+        #print(self.valid_data_DCNN)
+        #print(self.full_data_DCNN)
+
+        # 예시 사용
+        new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
+
+        x_train = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
+        y_train = self.train_data_DCNN['RUL']
+        print(x_train.shape)
+        print(y_train.shape)
+
+        # return 값이 2개여야 함. train data와 true label.
+        return x_train, y_train
+
+    def create_time_window_dataset(self, df, time_window):
+        # 결과를 저장할 리스트
+        result = []
+        # 각 unit_number별로 데이터를 그룹화
+        grouped = df.groupby('unit_number')
+
+        # 각 unit_number에 대해 반복
+        for _, group in grouped:
+            # time_cycles에 대해 정렬 (필요할 경우)
+            group = group.sort_values(by='time_cycles')
+
+            # group에서 인덱스를 재설정
+            group = group.reset_index(drop=True)
+
+            # group 내에서 time_cycles을 기준으로 time_window를 구성
+            for i in range(len(group)):
+                # 6번째 열부터 마지막 열까지만 포함
+                sensor_data = group.iloc[:, 5:-1]
+
+                # time_window에 해당하는 데이터 가져오기
+                if i < time_window - 1:
+                    # time_window가 부족한 경우, 0으로 패딩
+                    padding = pd.DataFrame(0, index=np.arange(time_window - i - 1), columns=sensor_data.columns)
+                    window = pd.concat([padding, sensor_data.iloc[:i + 1]], axis=0).reset_index(drop=True)
+                else:
+                    # 정상적으로 time_window 크기만큼 데이터 가져오기
+                    window = sensor_data.iloc[i - time_window + 1:i + 1].reset_index(drop=True)
+
+                # 결과 리스트에 추가
+                result.append(window)
+
+        # 모든 데이터를 리스트에서 결합하여 새로운 DataFrame 생성
+        final_result = np.array(result)  # 3차원 데이터로 변환
+
+        return final_result
+
+
+    def train_DCNN(self): # 논문에서 다룬 것과 일치 (piecewise linear degradation 빼고)
+        # define model
+        model = models.Sequential()
+        # Xavier normal initializer
+        initializer = initializers.GlorotUniform()
+
+        # 1D Convolution layers
+        model.add(
+            layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh', kernel_initializer=initializer,
+                          input_shape=(self.DCNN_N_tw, self.DCNN_N_ft)))
+        model.add(layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh',
+                                kernel_initializer=initializer))
+        model.add(layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh',
+                                kernel_initializer=initializer))
+        model.add(layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh',
+                                kernel_initializer=initializer))
+
+        # High-level representation using another Conv1D layer
+        model.add(layers.Conv1D(filters=1, kernel_size=3, padding='same', activation='tanh'))
+        # Flatten the 2D feature map
+        model.add(layers.Flatten())
+        # Dropout layer
+        model.add(layers.Dropout(self.DCNN_dropout_rate))
+        # Fully-connected layer
+        model.add(layers.Dense(self.DCNN_neurons_fc, activation='tanh', kernel_initializer=initializer))
+        # Output layer for RUL estimation
+        model.add(layers.Dense(1, kernel_initializer=initializer))
+
+        # Learning rate scheduler function
+        def lr_schedule(epoch, lr):
+            if epoch < 200:  # The learning rate is 0.001 for fast optimization
+                return 0.001
+            else:  # The learning rate of 0.0001 is used afterwards for stable convergence.
+                return 0.0001
+
+        # Learning rate scheduler callback
+        lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1)
+
+        # compile
+        model.compile(optimizer=tf.keras.optimizers.Adam(), loss='mean_squared_error')
+        #model.summary()
+
+        # input data
+        x_train, y_train = self.generate_input_for_DCNN()
+
+        # x_train은 N(14130) × 30 × 14 shape, y_train은 N(14130)
+        # x_train.shape == (N, 30, 14)
+        # y_train.shape == (N, )
+        model.fit(x_train, y_train, batch_size=self.DCNN_batch_size, epochs=self.DCNN_epochs, callbacks=[lr_scheduler])
 
 
 """generate instance"""
 run_sim = RunSimulation('config_009.ini')
 # run_sim_1 = RunSimulation('config_004.ini')
+
+""" ###############################
+Deep Convolution Neural Network
+"""
+#run_sim.train_DCNN()  # 마무리 후 실행.
+
+
+
 """ ################################
 Linear Regression Simulation
 """
@@ -2092,9 +2238,10 @@ Reinforcement Learning (value-based)
 # run_sim.train_continue_many_lr_by_td_loss()   # 이미 학습된 weight을 이어서 학습시킬 때 사용.
 # run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
 
+# 잠깐 블럭처리
 # theta도 함께 학습
 run_sim.train_many_lr_by_td_loss_theta()
-run_sim.run_TD_loss_simulation_theta(False) # 학습된 threshold로 성능 테스트
+run_sim.run_TD_loss_simulation_theta(False)  # 학습된 threshold로 성능 테스트
 #run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
 
 # 학습된 weight으로 MSE 계산
