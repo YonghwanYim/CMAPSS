@@ -13,6 +13,8 @@ import warnings
 from copy import copy
 import random
 import matplotlib.pyplot as plt
+import torch
+import gc
 
 # Custom .py
 from linear_regression_TD import Linear_Regression_TD
@@ -24,6 +26,9 @@ from loss_td import DecisionAwareTD
 from RL_component import Environment
 from RL_component import Rewards
 from RL_component import Agent
+
+# DCNN
+from DeepCNN import DCNN, DCNN_Model
 
 
 # Filter out the warning
@@ -76,7 +81,10 @@ class RunSimulation():
         self.td_weight_21 = np.random.normal(loc=0, scale=0.5, size=21)  # RL과 weight 크기 맞춰서 비교하기 위함.
 
         self.td_simulation_threshold = float(config['SimulationSettings']['td_simulation_threshold'])
-        self.is_crucial_moment = bool(config['SimulationSettings']['is_crucial_moment'])
+        #self.is_crucial_moment = bool(config['SimulationSettings']['is_crucial_moment'])
+        self.is_crucial_moment = config.getboolean('SimulationSettings', 'is_crucial_moment')
+        #self.is_td_front = bool(config['SimulationSettings']['is_td_front'])
+        self.is_td_front = config.getboolean('SimulationSettings', 'is_td_front')
 
         # constant of simulation
         self.threshold_start = int(config['SimulationSettings']['threshold_start'])
@@ -380,7 +388,6 @@ class RunSimulation():
                     # theta의 gradient
                     gradient_theta = 2 * self.td_alpha * (-(1 / self.td_beta) - WX_t + self.agent.theta)
                     """
-
 
                     # prediction term에 theta를 넣었을 때의 gradient
                     # weights의 gradient
@@ -1337,7 +1344,14 @@ class RunSimulation():
                        -1] + 1) and RL_env.environment['unit_number'].iloc[state_index] == (unit_num + 1):
                 current_state = state
 
-                if np.dot(self.agent.lr_best_weights['continue'], current_state) > threshold:
+                # 만약 td_front가 true면 예측한 RUL에 threshold를 더해줌. 즉 퍼포먼스를 q hat으로 보겠다는 의미임.
+                if self.is_td_front:
+                    threshold_switch = 1 # 1로 설정해서 threshold를 곱하면 그만큼 predicted RUL을 증가시킬 수 있음.
+                else:
+                    threshold_switch = 0
+
+                if np.dot(self.agent.lr_best_weights['continue'], current_state) + threshold_switch * threshold \
+                        > threshold:
                     chosen_action = 'continue'
                 else:
                     chosen_action = 'replace'
@@ -1608,8 +1622,10 @@ class RunSimulation():
         full_data.insert(loc=full_data.columns.get_loc('s_1'), column='s_0', value=1)
 
         full_data.reset_index(drop=True, inplace=True)
+        print("is_td_front")
+        print(self.is_td_front)
 
-        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, threshold)
+        self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, threshold, self.is_td_front)
         # self.env.plot_RUL_prediction_by_lr_td_loss(full_data, self.td_weight, scale, 20)
 
     def plot_lr_td_loss_to_RUL_all_samples(self, scale):
@@ -2075,29 +2091,31 @@ class RunSimulation():
         mse = ((selected_data['actual_RUL'] - selected_data['predicted_RUL']) ** 2).mean()
         print(mse)
 
-    def generate_input_for_DCNN(self):
+    def generate_input_for_DCNN(self, is_train):
         # Original DCNN 적용을 위한 dataset 생성 (1~70 train, 71~100 valid, 1~100 full).
         # 사용하지 않는 센서 column 삭제 (DCNN paper).
         self.drop_columns = ['s_1', 's_5', 's_6', 's_10', 's_16', 's_18', 's_19']
         self.train_data_DCNN, self.valid_data_DCNN, self.full_data_DCNN = self.env.load_data(self.num_dataset, self.split_unit_number)
-
         # 사용하지 않는 column 삭제 후, true label column 추가 (RUL)
         self.train_data_DCNN = self.train_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.train_data_DCNN = self.env.data_scaler_only_sensor(self.train_data_DCNN)
         self.train_data_DCNN = self.env.add_RUL_column(self.train_data_DCNN)
+
         self.valid_data_DCNN = self.valid_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.valid_data_DCNN = self.env.data_scaler_only_sensor(self.valid_data_DCNN)
         self.valid_data_DCNN = self.env.add_RUL_column(self.valid_data_DCNN)
+
         self.full_data_DCNN = self.full_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
         self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
 
         new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
 
-        print(self.train_data_DCNN)
-        #print(new_data)
-        #print(self.valid_data_DCNN)
-        #print(self.full_data_DCNN)
-
-        # 예시 사용
-        new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
+        # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
+        if is_train:
+            new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
+        else:
+            new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
 
         x_train = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
         y_train = self.train_data_DCNN['RUL']
@@ -2106,6 +2124,65 @@ class RunSimulation():
 
         # return 값이 2개여야 함. train data와 true label.
         return x_train, y_train
+
+    def generate_input_for_DCNN_observe_10(self, is_train):
+        # Original DCNN 적용을 위한 dataset 생성 (1~70 train, 71~100 valid, 1~100 full).
+        # 사용하지 않는 센서 column 삭제 (DCNN paper).
+        self.drop_columns = ['s_1', 's_5', 's_6', 's_10', 's_16', 's_18', 's_19']
+
+        # 새롭게 초기화.
+        self.train_data_DCNN = pd.DataFrame()
+        self.valid_data_DCNN = pd.DataFrame()
+        self.full_data_DCNN = pd.DataFrame()
+
+        # 반복문에 넣기 위해 list로 정의.
+        data_types = ['train', 'valid', 'full']
+        data_indices = [0, 1, 2]  # train, valid, full의 인덱스
+
+        # 샘플링한 데이터셋을 이어붙임.
+        for data_sample_index in range(self.num_sample_datasets):
+            for data_type, index in zip(data_types, data_indices):
+                new_data = self.sampled_datasets_with_RUL[data_sample_index][index].copy()
+
+                if data_type == 'train':
+                    self.train_data_DCNN = pd.concat([self.train_data_DCNN, new_data], ignore_index=True)
+                elif data_type == 'valid':
+                    self.valid_data_DCNN = pd.concat([self.valid_data_DCNN, new_data], ignore_index=True)
+                elif data_type == 'full':
+                    self.full_data_DCNN = pd.concat([self.full_data_DCNN, new_data], ignore_index=True)
+
+            print(f"Processed sample index: {data_sample_index}")
+
+        # 사용하지 않는 column 삭제 후, true label column 추가 (RUL)
+        self.train_data_DCNN = self.train_data_DCNN.drop(columns='RUL', errors='ignore')
+        self.train_data_DCNN = self.train_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.train_data_DCNN = self.env.data_scaler_only_sensor(self.train_data_DCNN)
+        self.train_data_DCNN = self.env.add_RUL_column(self.train_data_DCNN)
+
+        self.valid_data_DCNN = self.valid_data_DCNN.drop(columns='RUL', errors='ignore')
+        self.valid_data_DCNN = self.valid_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.valid_data_DCNN = self.env.data_scaler_only_sensor(self.valid_data_DCNN)
+        self.valid_data_DCNN = self.env.add_RUL_column(self.valid_data_DCNN)
+
+        self.full_data_DCNN = self.full_data_DCNN.drop(columns='RUL', errors='ignore')
+        self.full_data_DCNN = self.full_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
+        self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
+
+        new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
+
+        # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
+        if is_train:
+            new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
+        else:
+            new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
+
+        x_train = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
+        y_train = self.train_data_DCNN['RUL']
+
+        # return 값이 2개여야 함. train data와 true label.
+        return x_train, y_train
+
 
     def create_time_window_dataset(self, df, time_window):
         # 결과를 저장할 리스트
@@ -2140,59 +2217,60 @@ class RunSimulation():
 
         # 모든 데이터를 리스트에서 결합하여 새로운 DataFrame 생성
         final_result = np.array(result)  # 3차원 데이터로 변환
+        print("input data")
+        print(final_result)
 
         return final_result
 
 
-    def train_DCNN(self): # 논문에서 다룬 것과 일치 (piecewise linear degradation 빼고)
-        # define model
-        model = models.Sequential()
-        # Xavier normal initializer
-        initializer = initializers.GlorotUniform()
+    def run_DCNN(self, full_observe):
+        # DCNN 학습, 예측치 저장까지 하나의 method로 구성.
+        # 인자 하나 추가해서, 10% 확률로 관측했을때 data 스위칭 할 수 있도록 하자.
 
-        # 1D Convolution layers
-        model.add(
-            layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh', kernel_initializer=initializer,
-                          input_shape=(self.DCNN_N_tw, self.DCNN_N_ft)))
-        model.add(layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh',
-                                kernel_initializer=initializer))
-        model.add(layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh',
-                                kernel_initializer=initializer))
-        model.add(layers.Conv1D(filters=self.DCNN_F_N, kernel_size=self.DCNN_F_L, padding='same', activation='tanh',
-                                kernel_initializer=initializer))
+        # Model creation
+        model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc, self.DCNN_dropout_rate)
+        trainer = DCNN_Model(model, self.DCNN_batch_size, self.DCNN_epochs)
 
-        # High-level representation using another Conv1D layer
-        model.add(layers.Conv1D(filters=1, kernel_size=3, padding='same', activation='tanh'))
-        # Flatten the 2D feature map
-        model.add(layers.Flatten())
-        # Dropout layer
-        model.add(layers.Dropout(self.DCNN_dropout_rate))
-        # Fully-connected layer
-        model.add(layers.Dense(self.DCNN_neurons_fc, activation='tanh', kernel_initializer=initializer))
-        # Output layer for RUL estimation
-        model.add(layers.Dense(1, kernel_initializer=initializer))
+        # Training을 위한 data 생성.
+        if full_observe: # 모든 데이터 관측 가능할 때.
+            x_train, y_train = self.generate_input_for_DCNN(True)  # True면 train data, label 반환 (False면 valid data, label 반환).
+        else: # 10% 확률로 관측 가능할 때.
+            x_train, y_train = self.generate_input_for_DCNN_observe_10(True)
 
-        # Learning rate scheduler function
-        def lr_schedule(epoch, lr):
-            if epoch < 200:  # The learning rate is 0.001 for fast optimization
-                return 0.001
-            else:  # The learning rate of 0.0001 is used afterwards for stable convergence.
-                return 0.0001
+        # Ensure x_train, y_train is a numpy array (tensor로 변환하려면 numpy array여야 함.)
+        #x_train = np.array(x_train, dtype=np.float32)  # Convert to numpy array if not already
+        x_train = np.ascontiguousarray(np.array(x_train, dtype=np.float32))  # Convert to contiguous numpy array
+        y_train = y_train.to_numpy(dtype=np.float32)  # Convert pandas Series to numpy array
 
-        # Learning rate scheduler callback
-        lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1)
+        # Assuming x_train and y_train are preloaded tensors
+        trainer.train_model(x_train, y_train)
 
-        # compile
-        model.compile(optimizer=tf.keras.optimizers.Adam(), loss='mean_squared_error')
-        #model.summary()
+        # model 학습 후 저장.
+        trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)
 
-        # input data
-        x_train, y_train = self.generate_input_for_DCNN()
+        # test를 위한 data 생성.
+        if full_observe:
+            x_valid, y_valid = self.generate_input_for_DCNN(False)  # False면 valid data, label 반환.
+        else:
+            x_valid, y_valid = self.generate_input_for_DCNN_observe_10(False)  # False면 valid data, label 반환.
 
-        # x_train은 N(14130) × 30 × 14 shape, y_train은 N(14130)
-        # x_train.shape == (N, 30, 14)
-        # y_train.shape == (N, )
-        model.fit(x_train, y_train, batch_size=self.DCNN_batch_size, epochs=self.DCNN_epochs, callbacks=[lr_scheduler])
+
+        x_valid = np.ascontiguousarray(np.array(x_valid, dtype=np.float32))  # Convert to contiguous numpy array
+        y_valid = y_valid.to_numpy(dtype=np.float32)  # Convert pandas Series to numpy array
+
+        # 모델 로드 후 predict
+        trainer.load_model()  # 기본 파일명을 사용하여 로드 (다른 pth load 하려면 바꿔줘야 함. 나중에 기능 추가하자)
+        predictions = trainer.predict(x_valid)
+
+
+        # 마지막 샘플만 RUL plot (valid 1개 샘플 사이즈는 650. 나중에 수정)
+        self.valid_data_DCNN['predicted_RUL'] = predictions
+        print(self.valid_data_DCNN)
+
+        last_sample = self.valid_data_DCNN.tail(650)
+        print(last_sample)
+        self.env.plot_RUL_prediction_by_DCNN(last_sample, self.td_simulation_threshold)
+
 
 
 """generate instance"""
@@ -2202,7 +2280,12 @@ run_sim = RunSimulation('config_009.ini')
 """ ###############################
 Deep Convolution Neural Network
 """
-#run_sim.train_DCNN()  # 마무리 후 실행.
+#run_sim.run_DCNN(True) # 전체 데이터 관측 가능.
+run_sim.run_DCNN(False) # 10% 데이터만 관측.
+
+#run_sim.generate_input_for_DCNN_observe_10(True)
+
+
 
 
 
@@ -2240,15 +2323,15 @@ Reinforcement Learning (value-based)
 
 # 잠깐 블럭처리
 # theta도 함께 학습
-run_sim.train_many_lr_by_td_loss_theta()
-run_sim.run_TD_loss_simulation_theta(False)  # 학습된 threshold로 성능 테스트
+#run_sim.train_many_lr_by_td_loss_theta()
+#run_sim.run_TD_loss_simulation_theta(False)  # 학습된 threshold로 성능 테스트
 #run_sim.run_TD_loss_simulation_theta(True)  # Config에 지정된 threshold로 성능 테스트
 
 # 학습된 weight으로 MSE 계산
-run_sim.calculate_MSE_weight_by_td_loss()
+#run_sim.calculate_MSE_weight_by_td_loss()
 
 # RUL prediction
-run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
+#run_sim.plot_lr_td_loss_to_RUL_all_samples(1) # RUl prediction plot
 
 
 # MSE가 최소가 되는 threshold 찾기.

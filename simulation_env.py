@@ -115,6 +115,23 @@ class SimulationEnvironment():
 
         return scaled_data
 
+    def data_scaler_only_sensor(self, data):
+        # 첫 5개의 column은 스케일링 하지 않음.
+        non_sensor_columns = data.iloc[:, :5]
+        # 6번째 열부터 끝까지 센서 데이터만 스케일링 적용
+        sensor_columns = data.iloc[:, 5:]
+
+        scaler = MinMaxScaler() # MinMax Scaler
+        scaled_sensor_data = scaler.fit_transform(sensor_columns)
+        #print(scaled_sensor_data)
+        #print(scaled_sensor_data.shape) # 정상적으로 동작한다면 size가 14로 끝남.
+
+        scaled_data = pd.concat([non_sensor_columns, pd.DataFrame(scaled_sensor_data, columns=sensor_columns.columns,
+                                                                  index=sensor_columns.index)], axis=1)
+        #print(scaled_data) # 여기서는 다시 합쳐진 데이터로 나와야 함.
+
+        return scaled_data
+
     def min_max_scaling(self, column):
         # for reinforcement learning environment.
         min_value = column.min()
@@ -207,13 +224,21 @@ class SimulationEnvironment():
         #plt.ylim(-50, 200)
         plt.show()
 
-    def plot_RUL_prediction_by_lr_td_loss(self, environment, weights, scale, threshold):
+    def plot_RUL_prediction_by_lr_td_loss(self, environment, weights, scale, threshold, is_td_front):
 
         # Calculate predicted RUL by multiplying 's_0' to 's_21' columns with weights_by_RL for all rows
         predicted_RUL = np.dot(environment.iloc[:, 5:27], weights)
 
         # Apply scale to predicted RUL values
         predicted_RUL *= scale
+
+        # If is_td_front is True, then predicted_RUL = predicted_RUL + threshold
+        print(predicted_RUL)
+        print(is_td_front)
+        if is_td_front:
+            predicted_RUL += threshold # TD loss (front) version. y-axis -> q-hat
+
+        print(predicted_RUL)
 
         # Add a new column 'predicted_RUL_by_Q' to the environment DataFrame
         environment['predicted_RUL'] = predicted_RUL
@@ -226,6 +251,36 @@ class SimulationEnvironment():
         # Plot for each unit_number
         for unit, group in grouped:
             #ax.plot(group['RUL'], group['predicted_RUL_by_Q'], label=f'Unit {unit}')
+            ax.plot(group['RUL'], group['predicted_RUL'])
+
+        # Draw a red dashed line at y=threshold
+        ax.axhline(y=threshold, color='r', linestyle='--', label='threshold')
+
+        # Plot a purple dashed line with slope -45 degrees passing through (0, 0)
+        x_vals = np.linspace(0, 350, 100)  # x-values from -350 to 0
+        y_vals = x_vals  # y-values corresponding to y = x
+        ax.plot(x_vals, y_vals, 'b--', linewidth=2, label='y = x')  # Plot purple dashed line
+
+        ax.set_xlabel('Remaining Useful Life')
+        ax.set_ylabel('Predicted RUL')
+        ax.set_title('Predicted RUL by Unit Number')
+        ax.legend(loc='upper right')  # Add legend
+
+        # Plot settings
+        plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
+        plt.ylim(-350, 400)
+        #plt.ylim(-50, 200)
+        plt.show()
+
+    def plot_RUL_prediction_by_DCNN(self, environment, threshold):
+        # 엔진별로 group.
+        grouped = environment.groupby('unit_number')
+
+        # Set subplot
+        fig, ax = plt.subplots(figsize=(16, 9))
+
+        # Plot for each unit_number
+        for unit, group in grouped:
             ax.plot(group['RUL'], group['predicted_RUL'])
 
         # Draw a red dashed line at y=threshold
