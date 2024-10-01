@@ -53,6 +53,11 @@ test_average_actual_rewards = []  # for average performance.
 test_average_usage_times = []
 test_replace_failures = []
 
+# For test (2024.10.02; Fixed theta)
+prediction_loss = 0
+decision_loss = 0
+
+
 
 class RunSimulation():
     def __init__(self, config_path):
@@ -81,9 +86,7 @@ class RunSimulation():
         self.td_weight_21 = np.random.normal(loc=0, scale=0.5, size=21)  # RL과 weight 크기 맞춰서 비교하기 위함.
 
         self.td_simulation_threshold = float(config['SimulationSettings']['td_simulation_threshold'])
-        #self.is_crucial_moment = bool(config['SimulationSettings']['is_crucial_moment'])
         self.is_crucial_moment = config.getboolean('SimulationSettings', 'is_crucial_moment')
-        #self.is_td_front = bool(config['SimulationSettings']['is_td_front'])
         self.is_td_front = config.getboolean('SimulationSettings', 'is_td_front')
 
         # constant of simulation
@@ -486,6 +489,12 @@ class RunSimulation():
 
         train_data = self.sampled_datasets_with_RUL[data_sample_index][0].copy()
         train_data[self.columns_to_scale] = train_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+
+        # crucial moment 적용을 위해 RUL이 crucial moment보다 적게 남은 데이터만 필터링함.
+        # default = False 임. 학습된 theta가 어떻게 바뀌는지 실험하기 위해 넣은 기능.
+        if self.is_crucial_moment == True:
+            train_data = train_data[train_data['RUL'] <= self.td_crucial_moment]
+
 
         # dummy row 추가 (마지막 row를 2번 복사해서 뒤에 추가)
         dummy_row = train_data.iloc[-1].copy()
@@ -1360,6 +1369,7 @@ class RunSimulation():
                 current_reward = self.reward.get_reward(state_index, next_state_index, chosen_action,
                                                         RL_env.environment)
 
+
                 if chosen_action == 'replace':
                     print('replace')
                     print(RL_env.environment.iloc[state_index]['time_cycles'])
@@ -2222,6 +2232,93 @@ class RunSimulation():
 
         return final_result
 
+    def calculated_prediction_and_decision_loss(self):
+        # Fixed threshold로 학습을 시켰을 때, prediction loss, decision loss의 영향을 보기 위한 method.
+        # threshold에 맞게 loss를 계산해줌 (threshold는 self.td_simulation_threshold 사용).
+        # Initialize test data (for iteration).
+        full_data = pd.DataFrame()
+        # load saved weight
+        with open('LR_TD_weight_by_RL_code.pkl', 'rb') as f:
+            self.td_weight = pickle.load(f)
+
+        # 샘플링한 데이터셋 병합 (24.10.01 기준 20개)
+        for data_sample_index in range(self.num_sample_datasets):
+            new_data = self.sampled_datasets_with_RUL[data_sample_index][2].copy()  # 2 means full data (0 train, 1 valid)
+            full_data = pd.concat([full_data, new_data], ignore_index=True)
+
+        print(full_data)
+
+        # multiple linear regression setting이라 non-linear setting이랑 feature가 다름.
+        full_data[self.columns_to_scale] = full_data[self.columns_to_scale].apply(self.env.min_max_scaling, axis=0)
+        # Add a new column 's_0' filled with 1 to the left of 's_1'
+        full_data.insert(full_data.columns.get_loc('s_1'), 's_0', 1)
+        # Select the columns from index 5 to 27 (6th to 28th columns) for the dot product
+        columns_for_prediction = full_data.iloc[:, 5:27]
+
+        # Calculate the predicted_RUL using selected columns and td_weight
+        full_data['predicted_RUL'] = np.dot(columns_for_prediction.values, self.td_weight)
+        # Initialize the time_difference column with default value 0
+        full_data['time_difference'] = 0
+        # Iterate through the data to calculate time_difference and set is_terminal_state
+        full_data['is_terminal_state'] = 0  # Initialize the is_terminal_state column with default value 0
+
+        # Iterate through the data to calculate time_differenceR
+        for i in range(len(full_data) - 1):
+            # If the next row has the same unit_number as the current row, calculate time difference
+            if full_data.loc[i, 'unit_number'] == full_data.loc[i + 1, 'unit_number']:
+                full_data.loc[i, 'time_difference'] = full_data.loc[i + 1, 'time_cycles'] - full_data.loc[
+                    i, 'time_cycles']
+            else:
+                # If unit_number changes, set time_difference to 0
+                full_data.loc[i, 'time_difference'] = 0
+                full_data.loc[i, 'is_terminal_state'] = 1  # Mark terminal state
+
+        # The last row should have time_difference set to 0
+        full_data.loc[len(full_data) - 1, 'time_difference'] = 0
+        full_data.loc[len(full_data) - 1, 'is_terminal_state'] = 1
+
+        # Filter the rows where 'is_terminal_state' is 1 (test)
+        print(full_data[full_data['is_terminal_state'] == 1])
+
+        # Initialize the decision_loss column with default value 0
+        full_data['decision_loss'] = 0
+
+        # Calculate decision_loss for each row
+        for i in range(len(full_data)):
+            if full_data.loc[i, 'is_terminal_state'] == 0:
+                # Calculate the first term of the decision loss
+                decision_loss_term1 = self.td_alpha * (1 - full_data.loc[i, 'is_terminal_state']) * (
+                        full_data.loc[i, 'time_difference'] +
+                        max(full_data.loc[i+1, 'predicted_RUL'] - self.td_simulation_threshold, 0) -
+                        full_data.loc[i, 'predicted_RUL'] +
+                        self.td_simulation_threshold
+                ) ** 2
+                full_data.loc[i, 'decision_loss'] = decision_loss_term1
+            else:
+                # Calculate the second term of the decision loss
+                decision_loss_term2 = self.td_alpha * full_data.loc[i, 'is_terminal_state'] * (
+                        -1 / self.td_beta - full_data.loc[i, 'predicted_RUL'] +
+                        self.td_simulation_threshold
+                ) ** 2
+                full_data.loc[i, 'decision_loss'] = decision_loss_term2
+
+        # Calculate the average decision_loss
+        average_decision_loss = full_data['decision_loss'].mean()
+
+        # Print the average decision_loss
+        print("Average Decision Loss:", average_decision_loss)
+
+        print(full_data)
+
+        # Calculate the prediction loss (MSE)
+        # (1 - alpha) * (RUL - predicted_RUL)^2 for each row
+        full_data['squared_error'] = (full_data['RUL'] - full_data['predicted_RUL']) ** 2
+        prediction_loss = (1 - self.td_alpha) * full_data['squared_error'].mean()
+
+        # Print the average prediction loss and decision loss
+        print(f"Prediction Loss (MSE): {prediction_loss}")
+        print("Average Decision Loss:", average_decision_loss)
+
 
     def run_DCNN(self, full_observe):
         # DCNN 학습, 예측치 저장까지 하나의 method로 구성.
@@ -2281,12 +2378,9 @@ run_sim = RunSimulation('config_009.ini')
 Deep Convolution Neural Network
 """
 #run_sim.run_DCNN(True) # 전체 데이터 관측 가능.
-run_sim.run_DCNN(False) # 10% 데이터만 관측.
+#run_sim.run_DCNN(False) # 10% 데이터만 관측.
 
 #run_sim.generate_input_for_DCNN_observe_10(True)
-
-
-
 
 
 """ ################################
@@ -2317,9 +2411,10 @@ Reinforcement Learning (value-based)
 
 
 """ RL 코드를 기반으로 한, TD loss로 Linear regression 학습. """
-# run_sim.train_many_lr_by_td_loss()
+run_sim.train_many_lr_by_td_loss()             # 2024.10.01에 마지막으로 씀. threshold 별 DL, PL 비교하기 위해 학슴 진행.
 # run_sim.train_continue_many_lr_by_td_loss()   # 이미 학습된 weight을 이어서 학습시킬 때 사용.
-# run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
+run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
+run_sim.calculated_prediction_and_decision_loss() # prediction loss, decision loss 계산.
 
 # 잠깐 블럭처리
 # theta도 함께 학습
