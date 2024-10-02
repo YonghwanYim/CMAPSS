@@ -1324,3 +1324,65 @@ class SimulationEnvironment():
         plt.title('Average Number of Observations per Episode')
         plt.show()
 
+    def plot_prediction_decision_loss_and_cost_by_threshold(self, threshold, prediction_loss, decision_loss, average_cost):
+        # 1. TD loss 계산 (prediction_loss + decision_loss)
+        td_loss = [p + d for p, d in zip(prediction_loss, decision_loss)]
+
+        # 2. 첫 번째 그래프: prediction_loss, decision_loss, TD loss
+        plt.figure(figsize=(10, 6))
+
+        # Prediction Loss
+        plt.plot(threshold, prediction_loss, label='Prediction Loss', color='blue', marker='o')
+
+        # Decision Loss
+        plt.plot(threshold, decision_loss, label='Decision Loss', color='red', marker='x')
+
+        # TD Loss (Prediction + Decision)
+        plt.plot(threshold, td_loss, label='TD Loss', color='green', marker='s')
+
+        # 그래프 제목 및 레이블 설정
+        plt.title('Prediction, Decision, and TD Loss by Threshold')
+        plt.xlabel('Threshold')
+        plt.ylabel('Loss')
+        plt.legend(loc='best')
+
+        # 그래프 표시
+        plt.grid(True)
+        plt.show()
+
+        # 3. 두 번째 그래프: average_cost
+        plt.figure(figsize=(10, 6))
+
+        # Average Cost
+        plt.plot(threshold, average_cost, label='Time Average Cost', color='purple', marker='d')
+
+        # 그래프 제목 및 레이블 설정
+        plt.title('Time Average Cost by Threshold')
+        plt.xlabel('Threshold')
+        plt.ylabel('Time Average Cost')
+        plt.legend(loc='best')
+
+        # 그래프 표시
+        plt.grid(True)
+        plt.show()
+
+    def plot_time_average_cost_by_beta(self, beta, time_average_cost):
+        # beta를 바꿔가며 학습시켰을 때 time_average_cost를 plot. cost가 최소가 되도록 하는 beta를 찾기 위해.
+        plt.figure(figsize=(10, 6))
+
+        # Time Average Cost
+        plt.plot(beta, time_average_cost, label='Time Average Cost', color='purple', marker='d')
+
+        # 그래프 제목 및 레이블 설정
+        plt.title('Time Average Cost by Beta')
+        plt.xlabel('Beta')
+        plt.ylabel('Time Average Cost')
+        plt.legend(loc='best')
+
+        # 그래프 표시
+        plt.grid(True)
+        plt.show()
+
+
+
+

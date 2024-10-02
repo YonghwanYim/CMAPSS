@@ -2368,6 +2368,37 @@ class RunSimulation():
         print(last_sample)
         self.env.plot_RUL_prediction_by_DCNN(last_sample, self.td_simulation_threshold)
 
+    def plot_prediction_decision_loss_by_threshold(self):
+        # threshold에 따른 prediction loss, decision loss, time average cost 비교 plot.
+        # 실험 데이터를 직접 입력해서 plot만 그려주는 method.
+        threshold = [0, 10, 20, 30, 40,
+                     50, 60, 80, 90, 110,
+                     120, 130]
+        prediction_loss = [1896.54, 1898.44, 1900.74, 1903.42, 1906.57,
+                           1910.23, 1914.54, 1925.23, 1931.95, 1948.82,
+                           1959.02, 1970.70]
+        decision_loss = [2599.73, 2534.09, 2470.38, 2408.89, 2350.02,
+                         2294.21, 2241.94, 2150.04, 2111.85, 2056.01,
+                         2041.24, 2037.54]
+        average_cost = [18.0255, 14.5555, 12.2323, 10.1881, 8.5900,
+                        7.8224, 7.2498, 6.9000, 7.2524, 9.3326,
+                        11.1962, 13.6109]
+
+        self.env.plot_prediction_decision_loss_and_cost_by_threshold(threshold, prediction_loss, decision_loss,
+                                                            average_cost)
+
+    def plot_cost_by_beta(self):
+        # beta, timeaverage cost를 입력 후, beta에 따른 lambda를 plot.
+        # lambda를 minimize 하는 beta를 찾는 것을 시각화.
+        # 실험 데이터를 직접 입력해서 plot만 그려주는 method.
+        beta = [0.00200, 0.00150, 0.00137, 0.00120, 0.00110,
+                0.00100, 0.00050, 0.00034, 0.00025, 0.00021, 0.00020,
+                0.00019, 0.000175, 0.00015, 0.00010, 0.00005]
+        time_average_cost = [7.2220, 7.1582, 7.1749, 7.1114, 7.1255,
+                             7.1116, 7.0815, 7.0719, 7.0808, 7.0597, 7.0341,
+                             7.0341, 7.0371, 7.0379, 7.0477, 7.0553]
+        self.env.plot_time_average_cost_by_beta(beta, time_average_cost)
+
 
 
 """generate instance"""
@@ -2378,9 +2409,9 @@ run_sim = RunSimulation('config_009.ini')
 Deep Convolution Neural Network
 """
 #run_sim.run_DCNN(True) # 전체 데이터 관측 가능.
-#run_sim.run_DCNN(False) # 10% 데이터만 관측.
+run_sim.run_DCNN(False) # 10% 데이터만 관측.
 
-#run_sim.generate_input_for_DCNN_observe_10(True)
+run_sim.generate_input_for_DCNN_observe_10(True)
 
 
 """ ################################
@@ -2411,10 +2442,13 @@ Reinforcement Learning (value-based)
 
 
 """ RL 코드를 기반으로 한, TD loss로 Linear regression 학습. """
-run_sim.train_many_lr_by_td_loss()             # 2024.10.01에 마지막으로 씀. threshold 별 DL, PL 비교하기 위해 학슴 진행.
+#run_sim.train_many_lr_by_td_loss()              # 2024.10.02에 마지막으로 씀. threshold 별 DL, PL 비교하기 위해 학슴 진행.
 # run_sim.train_continue_many_lr_by_td_loss()   # 이미 학습된 weight을 이어서 학습시킬 때 사용.
-run_sim.run_TD_loss_simulation()               # 학습 결과 시뮬레이션.
-run_sim.calculated_prediction_and_decision_loss() # prediction loss, decision loss 계산.
+#run_sim.run_TD_loss_simulation()                # 학습 결과 시뮬레이션.
+#run_sim.calculated_prediction_and_decision_loss() # prediction loss, decision loss 계산.
+
+#run_sim.plot_prediction_decision_loss_by_threshold() # 학습된 weight으로 prediction loss, decision loss 계산
+#run_sim.plot_cost_by_beta() # beta에 따른 time average cost 출력용.
 
 # 잠깐 블럭처리
 # theta도 함께 학습

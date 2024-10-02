@@ -3,6 +3,9 @@
 * DCNN Version 1
 * Final update : 2024.09.26
 """
+# Custom TD Loss function
+from CustomTDLoss import CustomTDLoss
+
 # directory를 자동으로 가져오기 위함.
 import os
 import numpy as np
@@ -68,6 +71,7 @@ class DCNN_Model:
 
         # Loss function and optimizer
         self.criterion = nn.MSELoss() # 나중에 MSE 대신 TD loss (Custom)으로 바꿔야 함. loss를 class로 정의하는게 편함
+        # self.criterion = CustomTDLoss() # create an instance of the TD loss.
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
 
         # MPS 가능 여부 출력 (for Mac silicon chip)
@@ -100,8 +104,6 @@ class DCNN_Model:
 
         print(x_train)
         print(y_train)
-
-
 
         for epoch in range(self.epochs):
             # Adjust learning rate
