@@ -2003,7 +2003,7 @@ class RunSimulation():
     def find_minimum_MSE_to_weight_by_td_loss(self):
         # td-loss로 학습된 weight으로 (22-dim; alpha = 1) MSE를 minimize 하는 threshold (theta)를 찾기 위한 method.
         # LR_TD_weight_by_RL_code_alpha_1 : decision-aware (q-learning) part만 고려해서 학습시킨 weight (threshold = 0 고정)
-        with open('LR_TD_weight_by_RL_code_alpha_1.pkl', 'rb') as f:
+        with open('pkl_file/LR_TD_weight_by_RL_code_alpha_1.pkl', 'rb') as f:
             self.td_weight = pickle.load(f)
 
         # 모든 샘플 데이터들을 합쳐서 하나의 데이터 셋으로 만들어서 MSE 측정.
@@ -2119,21 +2119,22 @@ class RunSimulation():
         self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
         self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
 
-        new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
+        #new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
+        self.y_label = self.train_data_DCNN['RUL'] # train이 아닐 때는 아래의 if문에서 valid로 변경.
 
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
         if is_train:
             new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
         else:
             new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
+            self.y_label = self.valid_data_DCNN['RUL']
 
-        x_train = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
-        y_train = self.train_data_DCNN['RUL']
-        print(x_train.shape)
-        print(y_train.shape)
+        x_feature = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
+        print(x_feature.shape)
+        print(self.y_label.shape)
 
         # return 값이 2개여야 함. train data와 true label.
-        return x_train, y_train
+        return x_feature, self.y_label
 
     def generate_input_for_DCNN_observe_10(self, is_train):
         # Original DCNN 적용을 위한 dataset 생성 (1~70 train, 71~100 valid, 1~100 full).
@@ -2179,19 +2180,25 @@ class RunSimulation():
         self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
         self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
 
-        new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
+        #new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
+        self.y_label = self.train_data_DCNN['RUL']  # train이 아닐 때는 아래의 if문에서 valid로 변경.
 
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
         if is_train:
             new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
         else:
             new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
+            self.y_label = self.valid_data_DCNN['RUL']
 
-        x_train = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
-        y_train = self.train_data_DCNN['RUL']
+        x_feature = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
+        print(x_feature)
+        print(x_feature.shape)
+        print(self.y_label)
+        print(self.y_label.shape)
+
 
         # return 값이 2개여야 함. train data와 true label.
-        return x_train, y_train
+        return x_feature, self.y_label
 
 
     def create_time_window_dataset(self, df, time_window):
@@ -2402,16 +2409,19 @@ class RunSimulation():
 
 
 """generate instance"""
-run_sim = RunSimulation('config_009.ini')
+#run_sim = RunSimulation('config_009.ini')
 # run_sim_1 = RunSimulation('config_004.ini')
 
 """ ###############################
 Deep Convolution Neural Network
 """
-#run_sim.run_DCNN(True) # 전체 데이터 관측 가능.
-run_sim.run_DCNN(False) # 10% 데이터만 관측.
+run_sim_obs_10 = RunSimulation('config_010.ini') # 10% 확률로 관측 가능할 때의 instance 생성.
+#run_sim_obs_10.generate_input_for_DCNN_observe_10(True)
 
-run_sim.generate_input_for_DCNN_observe_10(True)
+#run_sim.run_DCNN(True)         # 전체 데이터 관측 가능.
+run_sim_obs_10.run_DCNN(False)  # 10% 데이터만 관측.
+
+#run_sim_obs_10.generate_input_for_DCNN_observe_10(True)
 
 
 """ ################################
