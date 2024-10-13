@@ -124,6 +124,8 @@ class RunSimulation():
         self.DCNN_neurons_fc = int(config['DCNN_Settings']['neurons_fc']) # Neurons in fully-connected layer
         self.DCNN_dropout_rate = float(config['DCNN_Settings']['dropout_rate'])
         self.DCNN_epochs = int(config['DCNN_Settings']['epochs'])
+
+        self.DCNN_is_fully_observe = config.getboolean('DCNN_Settings', 'is_fully_observe')
         ########################################################################################################
 
 
@@ -2122,6 +2124,9 @@ class RunSimulation():
         #new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
         self.y_label = self.train_data_DCNN['RUL'] # train이 아닐 때는 아래의 if문에서 valid로 변경.
 
+        print('is train :')
+        print(is_train)
+
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
         if is_train:
             new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
@@ -2130,7 +2135,9 @@ class RunSimulation():
             self.y_label = self.valid_data_DCNN['RUL']
 
         x_feature = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
+        print(x_feature)
         print(x_feature.shape)
+        print(self.y_label)
         print(self.y_label.shape)
 
         # return 값이 2개여야 함. train data와 true label.
@@ -2180,15 +2187,33 @@ class RunSimulation():
         self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
         self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
 
+        print('debug - test')
+        print('train data')
+        print(self.train_data_DCNN)
+        print(self.train_data_DCNN.shape)
+
+        print('valid data')
+        print(self.valid_data_DCNN)
+        print(self.valid_data_DCNN.shape)
+
+        print(is_train)
+
+
         #new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
         self.y_label = self.train_data_DCNN['RUL']  # train이 아닐 때는 아래의 if문에서 valid로 변경.
 
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
         if is_train:
-            new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
+            #new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
+            new_dataset = self.create_time_window_dataset_observe_10(self.train_data_DCNN, self.DCNN_N_tw)
         else:
-            new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
+            #new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
+            new_dataset = self.create_time_window_dataset_observe_10(self.valid_data_DCNN, self.DCNN_N_tw)
             self.y_label = self.valid_data_DCNN['RUL']
+
+        print('new dataset')
+        print(new_dataset)
+        print(new_dataset.shape)
 
         x_feature = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
         print(x_feature)
@@ -2196,11 +2221,230 @@ class RunSimulation():
         print(self.y_label)
         print(self.y_label.shape)
 
-
         # return 값이 2개여야 함. train data와 true label.
         return x_feature, self.y_label
 
+    """
+    def create_time_window_dataset(self, df, time_window):
+        # 10% 확률로 관측한 dataset (20개의 샘플 데이터 모음; unit number 반복됨), 전체 관측 가능한 dataset (unit number가 반복되지 않음)
+        # 위의 두가지 경우를 모두 다룰 수 있도록 코드를 수정함. 기존 코드는 group을 나눠서 unit_number가 바뀌는 시점을 판단했는데,
+        # 10% 관측 데이터에서 그렇게 하면 20개의 샘플 데이터 셋의 같은 unit number data가 하나로 합쳐져서 문제 발생.
+        # 결과를 저장할 리스트
+        result = []
 
+        # 데이터셋의 인덱스 재설정
+        df = df.reset_index(drop=True)
+
+        # unit_number 열의 변화를 감지하기 위해 이전 unit_number를 추적
+        previous_unit_number = None
+        current_window = []
+
+        for i in range(len(df)):
+            # 현재 행의 unit_number
+            current_unit_number = df.loc[i, 'unit_number']
+
+            # unit_number가 바뀌면 현재까지 쌓인 윈도우를 패딩 처리 후 저장
+            if current_unit_number != previous_unit_number:
+                # 이전 유닛의 마지막 time window에 대한 패딩을 적용
+                if current_window:
+                    for j in range(1, time_window):
+                        # 패딩을 추가하여 time_window 크기를 맞춰 저장
+                        padding = pd.DataFrame(0, index=np.arange(j), columns=sensor_data.columns)
+                        padded_window = pd.concat([padding, pd.DataFrame(current_window)], axis=0).reset_index(
+                            drop=True)
+                        result.append(padded_window.values)
+
+                # 새로운 unit_number로 바뀌었으므로 current_window 초기화
+                current_window = []
+
+            # 현재 유닛의 센서 데이터 (6번째 열부터 마지막 열까지)
+            sensor_data = df.iloc[i, 5:-1]
+
+            # time_window 크기에 맞춰 윈도우를 구성
+            if len(current_window) < time_window:
+                current_window.append(sensor_data.values)
+            else:
+                # time_window가 꽉 차면 앞의 데이터를 밀어내고 새로운 데이터를 추가
+                current_window = current_window[1:] + [sensor_data.values]
+
+            # 윈도우가 충분하지 않으면 패딩하여 추가
+            if len(current_window) < time_window:
+                padding = pd.DataFrame(0, index=np.arange(time_window - len(current_window)), columns=df.columns[5:-1])
+                window = pd.concat([padding, pd.DataFrame(current_window)], axis=0).reset_index(drop=True)
+            else:
+                window = pd.DataFrame(current_window)
+
+            # 결과에 추가
+            result.append(window.values)
+
+            # 다음 iteration을 위한 previous_unit_number 갱신
+            previous_unit_number = current_unit_number
+
+        # 마지막 유닛 처리: 마지막으로 남아 있는 윈도우도 패딩 처리하여 저장
+        if current_window:
+            for j in range(1, time_window):
+                padding = pd.DataFrame(0, index=np.arange(j), columns=df.columns[5:-1])
+                padded_window = pd.concat([padding, pd.DataFrame(current_window)], axis=0).reset_index(drop=True)
+                result.append(padded_window.values)
+
+        # 3차원 배열로 변환 후 출력
+        final_result = np.array(result)
+        print("input data")
+        print(final_result)
+
+        return final_result
+    """
+
+    def create_time_window_dataset_observe_10(self, df, time_window):
+        # 결과를 저장할 리스트
+        result = []
+
+        # 이전 unit_number를 추적하기 위한 변수
+        previous_unit_number = None
+
+        # 데이터 프레임의 각 행을 반복
+        for i in range(len(df)):
+            current_unit_number = df.iloc[i]['unit_number']
+
+            # 유닛 넘버가 바뀌었을 때, zero padding 적용
+            if previous_unit_number is not None and current_unit_number != previous_unit_number:
+                # 이전 유닛 넘버에서 padding 적용
+                padding = pd.DataFrame(0, index=np.arange(time_window), columns=df.columns[5:-1])
+                result.append(padding)
+
+            # 현재 행의 센서 데이터를 가져옴
+            sensor_data = df.iloc[i, 5:-1]
+
+            # 현재 행이 포함된 time_window 데이터 구성
+            if i < time_window - 1:
+                # time_window가 부족한 경우, 0으로 패딩
+                padding = pd.DataFrame(0, index=np.arange(time_window - i - 1), columns=sensor_data.index)
+                window = pd.concat([padding, pd.DataFrame(sensor_data).T], axis=0).reset_index(drop=True)
+            else:
+                # 정상적으로 time_window 크기만큼 데이터 가져오기
+                window = df.iloc[i - time_window + 1:i + 1, 5:-1].reset_index(drop=True)
+
+            # 결과 리스트에 추가
+            result.append(window)
+
+            # 이전 유닛 넘버 업데이트
+            previous_unit_number = current_unit_number
+
+        # 모든 데이터를 리스트에서 결합하여 새로운 DataFrame 생성
+        # 여기서 result의 각 요소가 동일한 크기를 갖는지 확인
+        max_shape = (time_window, len(df.columns[5:-1]))  # 최대 형태 정의
+        padded_result = []
+
+        for window in result:
+            if window.shape != max_shape:  # 모양이 다를 경우
+                # 패딩 추가
+                padding = pd.DataFrame(0, index=np.arange(max_shape[0] - window.shape[0]), columns=window.columns)
+                window = pd.concat([window, padding], axis=0).reset_index(drop=True)
+
+            padded_result.append(window)
+
+        final_result = np.array(padded_result)  # 3차원 데이터로 변환
+        print("input data")
+        print(final_result)
+
+        return final_result
+    """
+    def create_time_window_dataset_observe_10(self, df, time_window):
+        # 결과를 저장할 리스트
+        result = []
+
+        # 이전 unit_number를 추적하기 위한 변수
+        previous_unit_number = None
+
+        # 데이터 프레임의 각 행을 반복
+        for i in range(len(df)):
+            current_unit_number = df.iloc[i]['unit_number']
+
+            # 유닛 넘버가 바뀌었을 때, zero padding 적용
+            if previous_unit_number is not None and current_unit_number != previous_unit_number:
+                # 이전 유닛 넘버에서 padding 적용
+                padding = pd.DataFrame(0, index=np.arange(time_window), columns=df.columns[5:-1])
+                result.append(padding)
+
+            # 현재 행의 센서 데이터를 가져옴
+            sensor_data = df.iloc[i, 5:-1]
+
+            # 현재 행이 포함된 time_window 데이터 구성
+            if i < time_window - 1:
+                # time_window가 부족한 경우, 0으로 패딩
+                padding = pd.DataFrame(0, index=np.arange(time_window - i - 1), columns=sensor_data.index)
+                window = pd.concat([padding, pd.DataFrame(sensor_data).T], axis=0).reset_index(drop=True)
+            else:
+                # 정상적으로 time_window 크기만큼 데이터 가져오기
+                window = df.iloc[i - time_window + 1:i + 1, 5:-1].reset_index(drop=True)
+
+            # 결과 리스트에 추가
+            result.append(window)
+
+            # 이전 유닛 넘버 업데이트
+            previous_unit_number = current_unit_number
+
+        # 모든 데이터를 리스트에서 결합하여 새로운 DataFrame 생성
+        final_result = np.array(result)  # 3차원 데이터로 변환
+        print("input data")
+        print(final_result)
+
+        return final_result
+    """
+    """
+    def create_time_window_dataset(self, df, time_window):
+        # 10% 확률로 관측한 dataset (20개의 샘플 데이터 모음; unit number 반복됨), 전체 관측 가능한 dataset (unit number가 반복되지 않음)
+        # 위의 두가지 경우를 모두 다룰 수 있도록 코드를 수정함. 기존 코드는 group을 나눠서 unit_number가 바뀌는 시점을 판단했는데,
+        # 10% 관측 데이터에서 그렇게 하면 20개의 샘플 데이터 셋의 같은 unit number data가 하나로 합쳐져서 문제 발생.
+        # 결과를 저장할 리스트
+        result = []
+
+        # 바뀌는 인덱스에 해당하는 데이터 출력
+        print("Changing indices:")
+        # 유닛 번호가 바뀌는 인덱스 목록
+        unit_change_indices = df.index[df['unit_number'].diff() != 0].tolist()
+        print(unit_change_indices)
+        print(df.loc[unit_change_indices])
+
+        # 데이터프레임을 유닛 번호 기준으로 반복
+        for start_index in unit_change_indices:
+            # 현재 유닛의 데이터프레임
+            if start_index == unit_change_indices[-1]:  # 마지막 유닛일 경우
+                group = df[start_index:]
+            else:
+                end_index = unit_change_indices[unit_change_indices.index(start_index) + 1]
+                group = df[start_index:end_index]
+
+            # 인덱스를 재설정
+            group = group.reset_index(drop=True)
+
+            # group 내에서 time_cycles을 기준으로 time_window를 구성
+            for i in range(len(group)):
+                # 6번째 열부터 마지막 열까지만 포함
+                sensor_data = group.iloc[:, 5:-1]
+
+                # time_window에 해당하는 데이터 가져오기
+                if i < time_window - 1:
+                    # time_window가 부족한 경우, 0으로 패딩
+                    padding = pd.DataFrame(0, index=np.arange(time_window - i - 1), columns=sensor_data.columns)
+                    window = pd.concat([padding, sensor_data.iloc[:i + 1]], axis=0).reset_index(drop=True)
+                else:
+                    # 정상적으로 time_window 크기만큼 데이터 가져오기
+                    window = sensor_data.iloc[i - time_window + 1:i + 1].reset_index(drop=True)
+
+                # 결과 리스트에 추가
+                result.append(window)
+
+        # 모든 데이터를 리스트에서 결합하여 새로운 배열 생성
+        final_result = np.array(result)  # 3차원 데이터로 변환
+        print("input data")
+        print(final_result)
+
+        return final_result
+    """
+
+
+    # 원본 method #
     def create_time_window_dataset(self, df, time_window):
         # 결과를 저장할 리스트
         result = []
@@ -2209,8 +2453,9 @@ class RunSimulation():
 
         # 각 unit_number에 대해 반복
         for _, group in grouped:
-            # time_cycles에 대해 정렬 (필요할 경우)
-            group = group.sort_values(by='time_cycles')
+            if self.DCNN_is_fully_observe:
+                # time_cycles에 대해 정렬 (필요할 경우; sample data를 합친 것에 적용할때는 하면 안됨. 서로 다른 샘플들이 섞임.)
+                group = group.sort_values(by='time_cycles')
 
             # group에서 인덱스를 재설정
             group = group.reset_index(drop=True)
@@ -2238,6 +2483,7 @@ class RunSimulation():
         print(final_result)
 
         return final_result
+
 
     def calculated_prediction_and_decision_loss(self):
         # Fixed threshold로 학습을 시켰을 때, prediction loss, decision loss의 영향을 보기 위한 method.
@@ -2327,7 +2573,7 @@ class RunSimulation():
         print("Average Decision Loss:", average_decision_loss)
 
 
-    def run_DCNN(self, full_observe):
+    def run_DCNN(self):
         # DCNN 학습, 예측치 저장까지 하나의 method로 구성.
         # 인자 하나 추가해서, 10% 확률로 관측했을때 data 스위칭 할 수 있도록 하자.
 
@@ -2336,7 +2582,7 @@ class RunSimulation():
         trainer = DCNN_Model(model, self.DCNN_batch_size, self.DCNN_epochs)
 
         # Training을 위한 data 생성.
-        if full_observe: # 모든 데이터 관측 가능할 때.
+        if self.DCNN_is_fully_observe: # 모든 데이터 관측 가능할 때.
             x_train, y_train = self.generate_input_for_DCNN(True)  # True면 train data, label 반환 (False면 valid data, label 반환).
         else: # 10% 확률로 관측 가능할 때.
             x_train, y_train = self.generate_input_for_DCNN_observe_10(True)
@@ -2353,7 +2599,7 @@ class RunSimulation():
         trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)
 
         # test를 위한 data 생성.
-        if full_observe:
+        if self.DCNN_is_fully_observe:
             x_valid, y_valid = self.generate_input_for_DCNN(False)  # False면 valid data, label 반환.
         else:
             x_valid, y_valid = self.generate_input_for_DCNN_observe_10(False)  # False면 valid data, label 반환.
@@ -2367,11 +2613,11 @@ class RunSimulation():
         predictions = trainer.predict(x_valid)
 
 
-        # 마지막 샘플만 RUL plot (valid 1개 샘플 사이즈는 650. 나중에 수정)
+        # 마지막 샘플만 RUL plot (valid 1개 샘플 사이즈는 650. 나중에 수정; 10% 관측의 경우)
         self.valid_data_DCNN['predicted_RUL'] = predictions
         print(self.valid_data_DCNN)
 
-        last_sample = self.valid_data_DCNN.tail(650)
+        last_sample = self.valid_data_DCNN.tail(6500)
         print(last_sample)
         self.env.plot_RUL_prediction_by_DCNN(last_sample, self.td_simulation_threshold)
 
@@ -2409,19 +2655,18 @@ class RunSimulation():
 
 
 """generate instance"""
-#run_sim = RunSimulation('config_009.ini')
-# run_sim_1 = RunSimulation('config_004.ini')
+run_sim = RunSimulation('config_009.ini')
 
 """ ###############################
 Deep Convolution Neural Network
 """
-run_sim_obs_10 = RunSimulation('config_010.ini') # 10% 확률로 관측 가능할 때의 instance 생성.
-#run_sim_obs_10.generate_input_for_DCNN_observe_10(True)
+#run_sim_obs_10 = RunSimulation('config_010.ini') # 10% 확률로 관측 가능할 때의 instance 생성.
 
-#run_sim.run_DCNN(True)         # 전체 데이터 관측 가능.
-run_sim_obs_10.run_DCNN(False)  # 10% 데이터만 관측.
+run_sim.run_DCNN()         # 전체 데이터 관측 가능.
+#run_sim_obs_10.run_DCNN()  # 10% 데이터만 관측.
 
-#run_sim_obs_10.generate_input_for_DCNN_observe_10(True)
+#run_sim.generate_input_for_DCNN(True)
+#run_sim_obs_10.generate_input_for_DCNN_observe_10(True) # input 잘 만들어지는지 확인
 
 
 """ ################################

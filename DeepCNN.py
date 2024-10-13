@@ -68,9 +68,17 @@ class DCNN_Model:
         self.batch_size = batch_size
         self.epochs = epochs
         self.base_dir = base_dir
+        self.x_batch_t_1 = None    # x_batch_t_1을 클래스 변수로 선언. loss에서 접근할 수 있도록.
+        self.outputs_t_1 = None    # y^{t+1}을 의미함. 즉 index가 +1이 된 상태에서 batch 단위로 예측한 값 저장. loss에서 직접 접근
 
         # Loss function and optimizer
-        self.criterion = nn.MSELoss() # 나중에 MSE 대신 TD loss (Custom)으로 바꿔야 함. loss를 class로 정의하는게 편함
+        #self.criterion = nn.MSELoss() # 나중에 MSE 대신 TD loss (Custom)으로 바꿔야 함. loss를 class로 정의하는게 편함
+
+        # TD Loss function 사용.
+        self.criterion = CustomTDLoss()
+        # 학습하는 모델 내에서는 아래처럼 불러와서 쓰면됨.
+        # loss = td_loss(outputs, targets)
+
         # self.criterion = CustomTDLoss() # create an instance of the TD loss.
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
 
@@ -114,13 +122,32 @@ class DCNN_Model:
                 x_batch = x_train[i:i + self.batch_size]
                 y_batch = y_train[i:i + self.batch_size]
 
-                # input data를 model에 전달하기 전에 CPU로 이동. #################
+                """ 이 부분이 있어야 y^{t+1}을 loss 내에서 계산 가능. """
+                # x_batch_t_1을 가져오기, 마지막 배치에서는 크기 맞춤
+                if i + self.batch_size < len(x_train):
+                    self.x_batch_t_1 = x_train[i + 1:i + 1 + self.batch_size]
+                else:
+
+                    # 마지막 배치: 크기를 맞추기 위해 마지막 값을 복사 (loss 계산시 마지막 값은 사용하지 않음.)
+                    # Indicator function으로 마지막 값 (엔진의 끝)은 0으로 처리하도록 CustomTDLoss에서 정의.
+                    self.x_batch_t_1 = x_train[i + 1:]  # 남은 데이터를 가져옴.
+                    if self.x_batch_t_1.shape[0] < x_batch.shape[0]:  # 크기가 작으면
+                        last_row = self.x_batch_t_1[-1].unsqueeze(0)  # 마지막 값을 가져옴
+                        # 부족한 부분을 마지막 값으로 채움
+                        while self.x_batch_t_1.shape[0] < x_batch.shape[0]:
+                            self.x_batch_t_1 = torch.cat([self.x_batch_t_1, last_row], dim=0)
+
+
+                # input data를 model에 전달하기 전에 GPU (or CPU)로 이동. #################
                 x_batch = x_batch.to(device)
                 y_batch = y_batch.to(device)
-                ###########################################################
 
-                # test (batch shape 보는 콛,)
+                """ 이 부분이 있어야 y^{t+1}을 loss 내에서 계산 가능. """
+                self.x_batch_t_1 = self.x_batch_t_1.to(device)
+
+                # test (batch shape 보는 코드)
                 #print(f"x_batch shape: {x_batch.shape}")
+                #print(f"x_t_1_batch shape: {self.x_batch_t_1.shape}")
                 #print(f"y_batch shape: {y_batch.shape}")
 
                 # Zero the parameter gradients
@@ -129,12 +156,12 @@ class DCNN_Model:
                 try:
                     # Forward pass
                     outputs = self.model(x_batch.permute(0, 2, 1)) # Ensure correct shape for Conv1D
+                    # Forward pass for x_batch_t_1 (t+1의 데이터로 만든 prediction. backward는 하지 않음.)
+                    self.outputs_t_1 = self.model(self.x_batch_t_1.permute(0, 2, 1))  # y^_{t+1}
+
                 except Exception as e:
                     print(f"Error during forward pass: {e}")
 
-                # Forward pass
-                #outputs = self.model(x_batch.permute(0, 2, 1))  # Ensure correct shape for Conv1D
-                #outputs = self.model(x_batch) # 에러가 난 코드. Pytorch에서 사용할 수 있는 데이터 타입으로 변환.
                 loss = self.criterion(outputs.squeeze(), y_batch) # squeeze로 output의 차원을 줄임. loss 계산시 차원이 일치하도록.
 
                 # Backward pass and optimize
@@ -186,9 +213,6 @@ class DCNN_Model:
         with torch.no_grad():
             #predictions = self.model(x_test)
             predictions = self.model(x_test).cpu().numpy()  # 예측 후 numpy 배열로 변환 (MPS -> CPU로 바꿔야 numpy로 변환 가능)
-
-        # predictions를 tensor에서 list로 변환. 원래 데이터에 predictions column을 추가하기 위해.
-        #predictions = predictions.cpu().numpy().tolist()
 
         return predictions.flatten()
 
