@@ -126,6 +126,7 @@ class RunSimulation():
         self.DCNN_epochs = int(config['DCNN_Settings']['epochs'])
 
         self.DCNN_is_fully_observe = config.getboolean('DCNN_Settings', 'is_fully_observe')
+        self.DCNN_is_td_loss = config.getboolean('DCNN_Settings', 'is_td_loss')
         ########################################################################################################
 
 
@@ -2112,16 +2113,29 @@ class RunSimulation():
         self.train_data_DCNN = self.train_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
         self.train_data_DCNN = self.env.data_scaler_only_sensor(self.train_data_DCNN)
         self.train_data_DCNN = self.env.add_RUL_column(self.train_data_DCNN)
+        # train_data_DCNN을 만들 때만 ObsTime과 is_last_time_cycle을 생성해야 함.
+        #print('self.train_data_DCNN')
+        #print(self.train_data_DCNN)
+
+        obs_time, is_last_time_cycle = self.env.calculate_obs_time_and_is_last_timecycle(self.train_data_DCNN)
+
+        #print('obs_time')
+        #print(obs_time)
+        #print((obs_time == 0).sum().item())
+
+        #print('is last time cycle')
+        #print(is_last_time_cycle)
+        #print((is_last_time_cycle == 1).sum().item())
 
         self.valid_data_DCNN = self.valid_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
         self.valid_data_DCNN = self.env.data_scaler_only_sensor(self.valid_data_DCNN)
         self.valid_data_DCNN = self.env.add_RUL_column(self.valid_data_DCNN)
 
-        self.full_data_DCNN = self.full_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
-        self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
-        self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
+        # 지금 code 기준으로 full data는 안씀 (2024.10.15)
+        #self.full_data_DCNN = self.full_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
+        #self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
+        #self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
 
-        #new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
         self.y_label = self.train_data_DCNN['RUL'] # train이 아닐 때는 아래의 if문에서 valid로 변경.
 
         print('is train :')
@@ -2138,10 +2152,14 @@ class RunSimulation():
         print(x_feature)
         print(x_feature.shape)
         print(self.y_label)
-        print(self.y_label.shape)
 
-        # return 값이 2개여야 함. train data와 true label.
-        return x_feature, self.y_label
+        if is_train:
+            # train일 때는 return이 4개. train data와 true label, ObsTime, is_last_time_cycle
+            return x_feature, self.y_label, obs_time, is_last_time_cycle
+        else:
+            # test인 경우는 return이 2개.
+            return x_feature, self.y_label
+
 
     def generate_input_for_DCNN_observe_10(self, is_train):
         # Original DCNN 적용을 위한 dataset 생성 (1~70 train, 71~100 valid, 1~100 full).
@@ -2176,17 +2194,24 @@ class RunSimulation():
         self.train_data_DCNN = self.train_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
         self.train_data_DCNN = self.env.data_scaler_only_sensor(self.train_data_DCNN)
         self.train_data_DCNN = self.env.add_RUL_column(self.train_data_DCNN)
+        # train_data_DCNN을 만들 때만 ObsTime과 is_last_timestep을 생성해야 함.
+        print(self.train_data_DCNN)
 
         self.valid_data_DCNN = self.valid_data_DCNN.drop(columns='RUL', errors='ignore')
         self.valid_data_DCNN = self.valid_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
         self.valid_data_DCNN = self.env.data_scaler_only_sensor(self.valid_data_DCNN)
         self.valid_data_DCNN = self.env.add_RUL_column(self.valid_data_DCNN)
 
+
+        # 지금 코드 기준으로 full data는 안씀 (2024.10.15).
+        """
         self.full_data_DCNN = self.full_data_DCNN.drop(columns='RUL', errors='ignore')
         self.full_data_DCNN = self.full_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
         self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
         self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
+        """
 
+        """ Test code """
         print('debug - test')
         print('train data')
         print(self.train_data_DCNN)
@@ -2196,10 +2221,7 @@ class RunSimulation():
         print(self.valid_data_DCNN)
         print(self.valid_data_DCNN.shape)
 
-        print(is_train)
 
-
-        #new_data = self.train_data_DCNN.iloc[:, 5:] # 센서데이터만 슬라이싱. (6번째 열부터)
         self.y_label = self.train_data_DCNN['RUL']  # train이 아닐 때는 아래의 if문에서 valid로 변경.
 
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
@@ -2579,21 +2601,35 @@ class RunSimulation():
 
         # Model creation
         model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc, self.DCNN_dropout_rate)
-        trainer = DCNN_Model(model, self.DCNN_batch_size, self.DCNN_epochs)
+        trainer = DCNN_Model(model, self.DCNN_batch_size, self.DCNN_epochs, self.DCNN_is_td_loss, self.td_alpha, self.td_beta, self.td_simulation_threshold)
 
         # Training을 위한 data 생성.
         if self.DCNN_is_fully_observe: # 모든 데이터 관측 가능할 때.
-            x_train, y_train = self.generate_input_for_DCNN(True)  # True면 train data, label 반환 (False면 valid data, label 반환).
+            x_train, y_train, obs_time, is_last_time_cycle = self.generate_input_for_DCNN(True)  # True면 train data, label 반환 (False면 valid data, label 반환).
         else: # 10% 확률로 관측 가능할 때.
             x_train, y_train = self.generate_input_for_DCNN_observe_10(True)
 
-        # Ensure x_train, y_train is a numpy array (tensor로 변환하려면 numpy array여야 함.)
-        #x_train = np.array(x_train, dtype=np.float32)  # Convert to numpy array if not already
+        # Ensure x_train, y_train, obs_time, is_last_time_cycle is a numpy array (tensor로 변환하려면 numpy array여야 함.)
         x_train = np.ascontiguousarray(np.array(x_train, dtype=np.float32))  # Convert to contiguous numpy array
-        y_train = y_train.to_numpy(dtype=np.float32)  # Convert pandas Series to numpy array
+        # Convert pandas Series to numpy array
+        y_train = y_train.to_numpy(dtype=np.float32)
+        obs_time = obs_time.to_numpy(dtype=np.float32)
+        is_last_time_cycle = is_last_time_cycle.to_numpy(dtype=np.float32)
+
+        """ # 제대로 tensor로 변환되었는지 확인용 코드.
+        print('obs_time')
+        print(obs_time)
+        print(obs_time.shape)
+        print('is_last_time_cycle')
+        print(is_last_time_cycle)
+        print(is_last_time_cycle.shape)
+        print('y_train')
+        print(y_train)
+        print(y_train.shape)
+        """
 
         # Assuming x_train and y_train are preloaded tensors
-        trainer.train_model(x_train, y_train)
+        trainer.train_model(x_train, y_train, obs_time, is_last_time_cycle) # 여기서 ObsTime, is_last_time_cycle이 인자로 전달되어야 함.
 
         # model 학습 후 저장.
         trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)

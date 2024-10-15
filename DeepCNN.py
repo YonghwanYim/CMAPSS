@@ -14,12 +14,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-# Example of calling the training function
-# Assuming x_train and y_train are PyTorch tensors with proper dimensions
 # x_train: (N, 30, 14), y_train: (N,)
 # x_train should be permuted to (N, 14, 30) because PyTorch expects (batch_size, in_channels, seq_length)
-# x_train = x_train.permute(0, 2, 1)
-# train_model(model, criterion, optimizer, x_train, y_train, epochs)
 
 # 모델 정의는 독립적으로 클래스화
 # 논문에서 다룬것과 동일. piecewise linear 셋팅만 제외하고.
@@ -63,23 +59,26 @@ class DCNN(nn.Module):
 
 # 훈련 로직은 별도의 클래스로 정의
 class DCNN_Model:
-    def __init__(self, model, batch_size=512, epochs=250, base_dir='./'):
+    def __init__(self, model, batch_size=512, epochs=250, is_td_loss=False, alpha = 0, beta = 0, theta = 0, base_dir='./'):
         self.model = model
         self.batch_size = batch_size
         self.epochs = epochs
+        self.is_td_loss = is_td_loss
+        self.alpha = alpha    # ratio
+        self.beta = beta
+        self.theta = theta    # threshold
         self.base_dir = base_dir
-        self.x_batch_t_1 = None    # x_batch_t_1을 클래스 변수로 선언. loss에서 접근할 수 있도록.
-        self.outputs_t_1 = None    # y^{t+1}을 의미함. 즉 index가 +1이 된 상태에서 batch 단위로 예측한 값 저장. loss에서 직접 접근
+
+        self.loss_fn = None # loss initialization
 
         # Loss function and optimizer
-        #self.criterion = nn.MSELoss() # 나중에 MSE 대신 TD loss (Custom)으로 바꿔야 함. loss를 class로 정의하는게 편함
+        if self.is_td_loss:
+            # create an instance of the TD loss.
+            self.loss_fn = CustomTDLoss(self.alpha, self.beta, self.theta)
+        else:
+            # 아닌 경우 MSE로 학습.
+            self.loss_fn = nn.MSELoss()
 
-        # TD Loss function 사용.
-        self.criterion = CustomTDLoss()
-        # 학습하는 모델 내에서는 아래처럼 불러와서 쓰면됨.
-        # loss = td_loss(outputs, targets)
-
-        # self.criterion = CustomTDLoss() # create an instance of the TD loss.
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
 
         # MPS 가능 여부 출력 (for Mac silicon chip)
@@ -95,9 +94,10 @@ class DCNN_Model:
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = 0.0001
 
-    def train_model(self, x_train, y_train):
+    def train_model(self, x_train, y_train, obs_time, is_last_time_cycle):
         # Training loop (assuming x_train is N × 30 × 14 and y_train is N)
         self.model.train()
+        #self.model.eval() # dropout 영향 test용 코드.
 
         # MPS로 mac M1 GPU 사용 (mac 전용 코드).
         device = torch.device("mps") if torch.backends.mps.is_available() else "cpu"
@@ -107,10 +107,14 @@ class DCNN_Model:
         try:
             x_train = torch.tensor(x_train, device=device, dtype=torch.float32)
             y_train = torch.tensor(y_train, device=device, dtype=torch.float32)
+            obs_time = torch.tensor(obs_time, device=device, dtype=torch.float32)
+            is_last_time_cycle = torch.tensor(is_last_time_cycle, device=device, dtype=torch.float32)
         except Exception as e:
             print("Error converting to tensor:", e)
 
+        print('x_train')
         print(x_train)
+        print('y_train')
         print(y_train)
 
         for epoch in range(self.epochs):
@@ -119,36 +123,45 @@ class DCNN_Model:
 
             for i in range(0, len(x_train), self.batch_size):
                 # Get the batch data
-                x_batch = x_train[i:i + self.batch_size]
-                y_batch = y_train[i:i + self.batch_size]
+                x_batch = None  # 블록 바깥에서 미리 정의.
+                """ 
+                 TD loss 적용시. t+1의 prediction까지 알아야 하니 forward 패스에서만 batch보다 1 크게 넣어줌.
+                 이렇게 하지 않고, [i+1 : i+1+self.batch_size]로 넣어서 \hat{y}_{t+1}를 구하면,
+                 training 중에는 drop out으로 인해 다른 결과가 출력됨. 즉, 중복되는 index인
+                 [i+1 : i+self.batch_size]까지의 outputs (Prediction)이 같지 않아짐.
+                 """
+                if self.is_td_loss : # td loss 사용시 x_batch 생성하는 코드
+                    if i + self.batch_size < len(x_train):
+                        # 마지막 batch가 아닐 때, 원래 batch보다 index를 1 크게 가져옴 (t+1 예측을 위해)
+                        x_batch = x_train[i:i + self.batch_size + 1]
+                    else:
+                        # 마지막 배치: 크기를 맞추기 위해 마지막 값을 복사 (loss 계산시 마지막 값은 사용하지 않음.)
+                        # Indicator function으로 마지막 값 (엔진의 끝)은 0으로 처리하도록 CustomTDLoss에서 정의.
+                        x_batch = x_train[i:]  # 남은 데이터를 가져옴.
+                        last_row = x_batch[-1].unsqueeze(0) # 마지막 값을 가져옴.
+                        x_batch = torch.cat([x_batch, last_row], dim=0) # 맨 끝에 마지막 값을 복사.
 
-                """ 이 부분이 있어야 y^{t+1}을 loss 내에서 계산 가능. """
-                # x_batch_t_1을 가져오기, 마지막 배치에서는 크기 맞춤
-                if i + self.batch_size < len(x_train):
-                    self.x_batch_t_1 = x_train[i + 1:i + 1 + self.batch_size]
                 else:
+                    # 일반적인 loss function (loss에 y^{t+1}이 사용되지 않는) 사용시.
+                    x_batch = x_train[i:i + self.batch_size]  # 일반적인 loss function 사용 시.
 
-                    # 마지막 배치: 크기를 맞추기 위해 마지막 값을 복사 (loss 계산시 마지막 값은 사용하지 않음.)
-                    # Indicator function으로 마지막 값 (엔진의 끝)은 0으로 처리하도록 CustomTDLoss에서 정의.
-                    self.x_batch_t_1 = x_train[i + 1:]  # 남은 데이터를 가져옴.
-                    if self.x_batch_t_1.shape[0] < x_batch.shape[0]:  # 크기가 작으면
-                        last_row = self.x_batch_t_1[-1].unsqueeze(0)  # 마지막 값을 가져옴
-                        # 부족한 부분을 마지막 값으로 채움
-                        while self.x_batch_t_1.shape[0] < x_batch.shape[0]:
-                            self.x_batch_t_1 = torch.cat([self.x_batch_t_1, last_row], dim=0)
-
+                y_batch = y_train[i:i + self.batch_size] # true label은 t+1이 필요 없음.
+                obs_time_batch = obs_time[i:i + self.batch_size]
+                is_last_time_cycle_batch = is_last_time_cycle[i:i + self.batch_size]
 
                 # input data를 model에 전달하기 전에 GPU (or CPU)로 이동. #################
                 x_batch = x_batch.to(device)
                 y_batch = y_batch.to(device)
+                obs_time_batch = obs_time_batch.to(device)
+                is_last_time_cycle_batch = is_last_time_cycle_batch.to(device)
 
                 """ 이 부분이 있어야 y^{t+1}을 loss 내에서 계산 가능. """
-                self.x_batch_t_1 = self.x_batch_t_1.to(device)
 
                 # test (batch shape 보는 코드)
                 #print(f"x_batch shape: {x_batch.shape}")
-                #print(f"x_t_1_batch shape: {self.x_batch_t_1.shape}")
                 #print(f"y_batch shape: {y_batch.shape}")
+                #print("x_batch")
+                #print(x_batch)
 
                 # Zero the parameter gradients
                 self.optimizer.zero_grad()
@@ -156,13 +169,18 @@ class DCNN_Model:
                 try:
                     # Forward pass
                     outputs = self.model(x_batch.permute(0, 2, 1)) # Ensure correct shape for Conv1D
-                    # Forward pass for x_batch_t_1 (t+1의 데이터로 만든 prediction. backward는 하지 않음.)
-                    self.outputs_t_1 = self.model(self.x_batch_t_1.permute(0, 2, 1))  # y^_{t+1}
 
                 except Exception as e:
                     print(f"Error during forward pass: {e}")
 
-                loss = self.criterion(outputs.squeeze(), y_batch) # squeeze로 output의 차원을 줄임. loss 계산시 차원이 일치하도록.
+                #print('outputs.squeeze()')
+                #print(outputs.squeeze())
+
+                # squeeze로 output의 차원을 줄임. loss 계산시 차원이 일치하도록 함. 인자로 ObsTime, last_TC가 들어감.
+                if self.is_td_loss:
+                    loss = self.loss_fn(outputs.squeeze(), y_batch, obs_time_batch, is_last_time_cycle_batch)
+                else:
+                    loss = self.loss_fn(outputs.squeeze(), y_batch)
 
                 # Backward pass and optimize
                 loss.backward()

@@ -1383,6 +1383,27 @@ class SimulationEnvironment():
         plt.grid(True)
         plt.show()
 
+    def calculate_obs_time_and_is_last_timecycle(self, df):
+        # ObsTime{t+1,t}, is last timecycle을 계산해서 반환하는 code.
+        # 위의 두 값들은 TD Loss로 모델을 학습시킬 때 쓰임.
+        df_copy = df.copy()
+        df_copy['ObsTime'] = 0  # 이렇게 초기화 해두면, (i, i+1)에서 unit number가 바뀌는 경우와 마지막 행은 자동으로 0이 저장됨.
+        df_copy['is_last_time_cycle'] = 1 # unit number의 마지막 time cycle이 아니라면 아래에서 0으로 바꿀 예정.
+
+        # 각 행을 순회하며 ObsTime 계산
+        for i in range(len(df_copy) - 1):
+            # 현재 행과 다음 행의 unit_number 비교
+            if df_copy.iloc[i]['unit_number'] == df_copy.iloc[i + 1]['unit_number']:
+                # ObsTime 계산
+                df_copy.at[i, 'ObsTime'] = df_copy.iloc[i + 1]['time_cycles'] - df_copy.iloc[i]['time_cycles']
+                df_copy.at[i, 'is_last_time_cycle'] = 0
+
+        return df_copy['ObsTime'], df_copy['is_last_time_cycle']
+
+
+
+
+
 
 
 
