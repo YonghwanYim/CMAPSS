@@ -1386,7 +1386,9 @@ class SimulationEnvironment():
     def calculate_obs_time_and_is_last_timecycle(self, df):
         # ObsTime{t+1,t}, is last timecycle을 계산해서 반환하는 code.
         # 위의 두 값들은 TD Loss로 모델을 학습시킬 때 쓰임.
-        df_copy = df.copy()
+        #df_copy = df.copy()
+        df_copy = df.reset_index(drop=True).copy()  # Resetting the index and creating a copy
+
         df_copy['ObsTime'] = 0  # 이렇게 초기화 해두면, (i, i+1)에서 unit number가 바뀌는 경우와 마지막 행은 자동으로 0이 저장됨.
         df_copy['is_last_time_cycle'] = 1 # unit number의 마지막 time cycle이 아니라면 아래에서 0으로 바꿀 예정.
 

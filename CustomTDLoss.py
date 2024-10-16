@@ -3,10 +3,15 @@ import torch.nn as nn
 
 class CustomTDLoss(nn.Module):
     def __init__(self, alpha, beta, theta):
+        """
+        :param alpha: The reflection ratio of the decision loss within the TD loss (float; 0~1).
+        :param beta: The value of the last time cycle compared to using the engine for a single time cycle (float).
+        :param theta: Threshold (Not a target for learning)
+        """
         super(CustomTDLoss, self).__init__()
-        self.alpha = alpha  # Ratio
-        self.beta = beta    # Parameter of last time-step.
-        self.theta = theta  # Threshold
+        self.alpha = alpha
+        self.beta = beta
+        self.theta = theta
 
     def forward(self, outputs, targets, obs_time, is_last_time_cycle):
         """
@@ -17,12 +22,12 @@ class CustomTDLoss(nn.Module):
                                     (tensor size : batch_size; type : float)
         :return: td loss
         """
-        # batch size에 관계 없이 동적으로 slicing 되도록 하는 변수 정의.
+        # batch size에 관계 없이 동적으로 slicing 되도록 하는 변수 batch_size 정의.
         batch_size = outputs.size(0) # tensor의 첫 번째 차원인 batch size. 실제 batch size보다 1 큼.
 
         # Slicing
-        outputs_t = outputs[:batch_size - 1] # 입력으로 받은 tensor에서 마지막 값만 빼고 slicing
-        outputs_t_1 = outputs[1:]            # 입력으로 받은 tensor에서 첫번째 값만 빼고 slicing.
+        outputs_t = outputs[:batch_size - 1] # 입력으로 받은 tensor에서 마지막 값만 빼고 slicing. (y^{t})
+        outputs_t_1 = outputs[1:]            # 입력으로 받은 tensor에서 첫번째 값만 빼고 slicing. (y^{t+1})
 
         """ Loss function 내의 'ObsTime{t+1,t} + max(y^_{t+1} - theta, 0)'는 미분하지 않고 상수로 처리하도록 하는 코드
             이 부분은 Q-learning에서의 target에 해당되므로 미분하지 않음. (RL에서도 상수 취급함)

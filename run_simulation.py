@@ -1861,19 +1861,9 @@ class RunSimulation():
         self.train_data_DCNN = self.train_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
         self.train_data_DCNN = self.env.data_scaler_only_sensor(self.train_data_DCNN)
         self.train_data_DCNN = self.env.add_RUL_column(self.train_data_DCNN)
+
         # train_data_DCNN을 만들 때만 ObsTime과 is_last_time_cycle을 생성해야 함.
-        #print('self.train_data_DCNN')
-        #print(self.train_data_DCNN)
-
         obs_time, is_last_time_cycle = self.env.calculate_obs_time_and_is_last_timecycle(self.train_data_DCNN)
-
-        #print('obs_time')
-        #print(obs_time)
-        #print((obs_time == 0).sum().item())
-
-        #print('is last time cycle')
-        #print(is_last_time_cycle)
-        #print((is_last_time_cycle == 1).sum().item())
 
         self.valid_data_DCNN = self.valid_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
         self.valid_data_DCNN = self.env.data_scaler_only_sensor(self.valid_data_DCNN)
@@ -1886,9 +1876,6 @@ class RunSimulation():
 
         self.y_label = self.train_data_DCNN['RUL'] # train이 아닐 때는 아래의 if문에서 valid로 변경.
 
-        print('is train :')
-        print(is_train)
-
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
         if is_train:
             new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
@@ -1896,10 +1883,8 @@ class RunSimulation():
             new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
             self.y_label = self.valid_data_DCNN['RUL']
 
+
         x_feature = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
-        print(x_feature)
-        print(x_feature.shape)
-        print(self.y_label)
 
         if is_train:
             # train일 때는 return이 4개. train data와 true label, ObsTime, is_last_time_cycle
@@ -1910,311 +1895,73 @@ class RunSimulation():
 
 
     def generate_input_for_DCNN_observe_10(self, is_train):
-        # Original DCNN 적용을 위한 dataset 생성 (1~70 train, 71~100 valid, 1~100 full).
+        # 10%만 관측 가능할때의 input 생성.
         # 사용하지 않는 센서 column 삭제 (DCNN paper).
         self.drop_columns = ['s_1', 's_5', 's_6', 's_10', 's_16', 's_18', 's_19']
 
-        # 새롭게 초기화.
-        self.train_data_DCNN = pd.DataFrame()
-        self.valid_data_DCNN = pd.DataFrame()
-        self.full_data_DCNN = pd.DataFrame()
-
-        # 반복문에 넣기 위해 list로 정의.
-        data_types = ['train', 'valid', 'full']
-        data_indices = [0, 1, 2]  # train, valid, full의 인덱스
+        # Initialize train_data_DCNN and valid_data_DCNN as empty arrays
+        self.train_data_DCNN = np.empty((0, self.DCNN_N_tw, self.DCNN_N_ft))
+        self.valid_data_DCNN = np.empty((0, self.DCNN_N_tw, self.DCNN_N_ft))
+        obs_time = None
+        is_last_time_cycle = None
+        y_label_train = None
+        y_label_valid = None
 
         # 샘플링한 데이터셋을 이어붙임.
         for data_sample_index in range(self.num_sample_datasets):
-            for data_type, index in zip(data_types, data_indices):
-                new_data = self.sampled_datasets_with_RUL[data_sample_index][index].copy()
+            # train data #############################################################################
+            train_data_tmp = self.sampled_datasets_with_RUL[data_sample_index][0].copy() # 0 : train
+            train_data_tmp = train_data_tmp.drop(columns='RUL', errors='ignore')
+            train_data_tmp = train_data_tmp.drop(columns=self.drop_columns, errors='ignore')
+            train_data_tmp = self.env.data_scaler_only_sensor(train_data_tmp)
+            train_data_tmp = self.env.add_RUL_column(train_data_tmp)
 
-                if data_type == 'train':
-                    self.train_data_DCNN = pd.concat([self.train_data_DCNN, new_data], ignore_index=True)
-                elif data_type == 'valid':
-                    self.valid_data_DCNN = pd.concat([self.valid_data_DCNN, new_data], ignore_index=True)
-                elif data_type == 'full':
-                    self.full_data_DCNN = pd.concat([self.full_data_DCNN, new_data], ignore_index=True)
+            obs_time_tmp, is_last_time_cycle_tmp = self.env.calculate_obs_time_and_is_last_timecycle(train_data_tmp)
+
+           # y-label, obs_time, is_last_time_cycle도 concat. (feature와 함께 loss의 input으로 들어가야함)
+            y_label_train = pd.concat([y_label_train, train_data_tmp['RUL']])
+            obs_time = pd.concat([obs_time, obs_time_tmp], ignore_index=True)
+            is_last_time_cycle = pd.concat([is_last_time_cycle, is_last_time_cycle_tmp], ignore_index=True)
+
+            # feature를 deep learning의 input으로 변환.
+            train_data_tmp = self.create_time_window_dataset(train_data_tmp, self.DCNN_N_tw)
+            self.train_data_DCNN = np.concatenate([self.train_data_DCNN, train_data_tmp], axis=0)
+
+            # valid data #############################################################################
+            valid_data_tmp = self.sampled_datasets_with_RUL[data_sample_index][1].copy() # 1 : valid
+            valid_data_tmp = valid_data_tmp.drop(columns='RUL', errors='ignore')
+            valid_data_tmp = valid_data_tmp.drop(columns=self.drop_columns, errors='ignore')
+            valid_data_tmp = self.env.data_scaler_only_sensor(valid_data_tmp)
+            valid_data_tmp = self.env.add_RUL_column(valid_data_tmp)
+
+            # valid data의 경우에는 y_label만 필요함 (loss 크기 등, 퍼포먼스 측정용)
+            y_label_valid = pd.concat([y_label_valid, valid_data_tmp['RUL']])
+
+            # feature를 deep learning의 input으로 변환.
+            valid_data_tmp = self.create_time_window_dataset(valid_data_tmp, self.DCNN_N_tw)
+            self.valid_data_DCNN = np.concatenate([self.valid_data_DCNN, valid_data_tmp], axis=0)
 
             print(f"Processed sample index: {data_sample_index}")
 
-        # 사용하지 않는 column 삭제 후, true label column 추가 (RUL)
-        self.train_data_DCNN = self.train_data_DCNN.drop(columns='RUL', errors='ignore')
-        self.train_data_DCNN = self.train_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
-        self.train_data_DCNN = self.env.data_scaler_only_sensor(self.train_data_DCNN)
-        self.train_data_DCNN = self.env.add_RUL_column(self.train_data_DCNN)
-        # train_data_DCNN을 만들 때만 ObsTime과 is_last_timestep을 생성해야 함.
-        print(self.train_data_DCNN)
-
-        self.valid_data_DCNN = self.valid_data_DCNN.drop(columns='RUL', errors='ignore')
-        self.valid_data_DCNN = self.valid_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
-        self.valid_data_DCNN = self.env.data_scaler_only_sensor(self.valid_data_DCNN)
-        self.valid_data_DCNN = self.env.add_RUL_column(self.valid_data_DCNN)
-
-        # 지금 코드 기준으로 full data는 안씀 (2024.10.15).
-        """
-        self.full_data_DCNN = self.full_data_DCNN.drop(columns='RUL', errors='ignore')
-        self.full_data_DCNN = self.full_data_DCNN.drop(columns=self.drop_columns, errors='ignore')
-        self.full_data_DCNN = self.env.data_scaler_only_sensor(self.full_data_DCNN)
-        self.full_data_DCNN = self.env.add_RUL_column(self.full_data_DCNN)
-        """
-
-        """ Test code """
-        print('debug - test')
-        print('train data')
-        print(self.train_data_DCNN)
-        print(self.train_data_DCNN.shape)
-
-        print('valid data')
-        print(self.valid_data_DCNN)
-        print(self.valid_data_DCNN.shape)
-
-
-        self.y_label = self.train_data_DCNN['RUL']  # train이 아닐 때는 아래의 if문에서 valid로 변경.
-
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
         if is_train:
-            #new_dataset = self.create_time_window_dataset(self.train_data_DCNN, self.DCNN_N_tw)
-            new_dataset = self.create_time_window_dataset_observe_10(self.train_data_DCNN, self.DCNN_N_tw)
+            new_dataset = self.train_data_DCNN
+            self.y_label = y_label_train
         else:
-            #new_dataset = self.create_time_window_dataset(self.valid_data_DCNN, self.DCNN_N_tw)
-            new_dataset = self.create_time_window_dataset_observe_10(self.valid_data_DCNN, self.DCNN_N_tw)
-            self.y_label = self.valid_data_DCNN['RUL']
-
-        print('new dataset')
-        print(new_dataset)
-        print(new_dataset.shape)
+            new_dataset = self.valid_data_DCNN
+            self.y_label = y_label_valid
 
         x_feature = new_dataset.reshape(-1, self.DCNN_N_tw, new_dataset.shape[2])
-        print(x_feature)
-        print(x_feature.shape)
-        print(self.y_label)
-        print(self.y_label.shape)
 
-        # return 값이 2개여야 함. train data와 true label.
-        return x_feature, self.y_label
+        if is_train:
+            # train일 때는 return이 4개. train data와 true label, ObsTime, is_last_time_cycle
+            return x_feature, self.y_label, obs_time, is_last_time_cycle
+        else:
+            # test인 경우는 return이 2개.
+            return x_feature, self.y_label
 
-    """
     def create_time_window_dataset(self, df, time_window):
-        # 10% 확률로 관측한 dataset (20개의 샘플 데이터 모음; unit number 반복됨), 전체 관측 가능한 dataset (unit number가 반복되지 않음)
-        # 위의 두가지 경우를 모두 다룰 수 있도록 코드를 수정함. 기존 코드는 group을 나눠서 unit_number가 바뀌는 시점을 판단했는데,
-        # 10% 관측 데이터에서 그렇게 하면 20개의 샘플 데이터 셋의 같은 unit number data가 하나로 합쳐져서 문제 발생.
-        # 결과를 저장할 리스트
-        result = []
-
-        # 데이터셋의 인덱스 재설정
-        df = df.reset_index(drop=True)
-
-        # unit_number 열의 변화를 감지하기 위해 이전 unit_number를 추적
-        previous_unit_number = None
-        current_window = []
-
-        for i in range(len(df)):
-            # 현재 행의 unit_number
-            current_unit_number = df.loc[i, 'unit_number']
-
-            # unit_number가 바뀌면 현재까지 쌓인 윈도우를 패딩 처리 후 저장
-            if current_unit_number != previous_unit_number:
-                # 이전 유닛의 마지막 time window에 대한 패딩을 적용
-                if current_window:
-                    for j in range(1, time_window):
-                        # 패딩을 추가하여 time_window 크기를 맞춰 저장
-                        padding = pd.DataFrame(0, index=np.arange(j), columns=sensor_data.columns)
-                        padded_window = pd.concat([padding, pd.DataFrame(current_window)], axis=0).reset_index(
-                            drop=True)
-                        result.append(padded_window.values)
-
-                # 새로운 unit_number로 바뀌었으므로 current_window 초기화
-                current_window = []
-
-            # 현재 유닛의 센서 데이터 (6번째 열부터 마지막 열까지)
-            sensor_data = df.iloc[i, 5:-1]
-
-            # time_window 크기에 맞춰 윈도우를 구성
-            if len(current_window) < time_window:
-                current_window.append(sensor_data.values)
-            else:
-                # time_window가 꽉 차면 앞의 데이터를 밀어내고 새로운 데이터를 추가
-                current_window = current_window[1:] + [sensor_data.values]
-
-            # 윈도우가 충분하지 않으면 패딩하여 추가
-            if len(current_window) < time_window:
-                padding = pd.DataFrame(0, index=np.arange(time_window - len(current_window)), columns=df.columns[5:-1])
-                window = pd.concat([padding, pd.DataFrame(current_window)], axis=0).reset_index(drop=True)
-            else:
-                window = pd.DataFrame(current_window)
-
-            # 결과에 추가
-            result.append(window.values)
-
-            # 다음 iteration을 위한 previous_unit_number 갱신
-            previous_unit_number = current_unit_number
-
-        # 마지막 유닛 처리: 마지막으로 남아 있는 윈도우도 패딩 처리하여 저장
-        if current_window:
-            for j in range(1, time_window):
-                padding = pd.DataFrame(0, index=np.arange(j), columns=df.columns[5:-1])
-                padded_window = pd.concat([padding, pd.DataFrame(current_window)], axis=0).reset_index(drop=True)
-                result.append(padded_window.values)
-
-        # 3차원 배열로 변환 후 출력
-        final_result = np.array(result)
-        print("input data")
-        print(final_result)
-
-        return final_result
-    """
-
-    def create_time_window_dataset_observe_10(self, df, time_window):
-        # 결과를 저장할 리스트
-        result = []
-
-        # 이전 unit_number를 추적하기 위한 변수
-        previous_unit_number = None
-
-        # 데이터 프레임의 각 행을 반복
-        for i in range(len(df)):
-            current_unit_number = df.iloc[i]['unit_number']
-
-            # 유닛 넘버가 바뀌었을 때, zero padding 적용
-            if previous_unit_number is not None and current_unit_number != previous_unit_number:
-                # 이전 유닛 넘버에서 padding 적용
-                padding = pd.DataFrame(0, index=np.arange(time_window), columns=df.columns[5:-1])
-                result.append(padding)
-
-            # 현재 행의 센서 데이터를 가져옴
-            sensor_data = df.iloc[i, 5:-1]
-
-            # 현재 행이 포함된 time_window 데이터 구성
-            if i < time_window - 1:
-                # time_window가 부족한 경우, 0으로 패딩
-                padding = pd.DataFrame(0, index=np.arange(time_window - i - 1), columns=sensor_data.index)
-                window = pd.concat([padding, pd.DataFrame(sensor_data).T], axis=0).reset_index(drop=True)
-            else:
-                # 정상적으로 time_window 크기만큼 데이터 가져오기
-                window = df.iloc[i - time_window + 1:i + 1, 5:-1].reset_index(drop=True)
-
-            # 결과 리스트에 추가
-            result.append(window)
-
-            # 이전 유닛 넘버 업데이트
-            previous_unit_number = current_unit_number
-
-        # 모든 데이터를 리스트에서 결합하여 새로운 DataFrame 생성
-        # 여기서 result의 각 요소가 동일한 크기를 갖는지 확인
-        max_shape = (time_window, len(df.columns[5:-1]))  # 최대 형태 정의
-        padded_result = []
-
-        for window in result:
-            if window.shape != max_shape:  # 모양이 다를 경우
-                # 패딩 추가
-                padding = pd.DataFrame(0, index=np.arange(max_shape[0] - window.shape[0]), columns=window.columns)
-                window = pd.concat([window, padding], axis=0).reset_index(drop=True)
-
-            padded_result.append(window)
-
-        final_result = np.array(padded_result)  # 3차원 데이터로 변환
-        print("input data")
-        print(final_result)
-
-        return final_result
-    """
-    def create_time_window_dataset_observe_10(self, df, time_window):
-        # 결과를 저장할 리스트
-        result = []
-
-        # 이전 unit_number를 추적하기 위한 변수
-        previous_unit_number = None
-
-        # 데이터 프레임의 각 행을 반복
-        for i in range(len(df)):
-            current_unit_number = df.iloc[i]['unit_number']
-
-            # 유닛 넘버가 바뀌었을 때, zero padding 적용
-            if previous_unit_number is not None and current_unit_number != previous_unit_number:
-                # 이전 유닛 넘버에서 padding 적용
-                padding = pd.DataFrame(0, index=np.arange(time_window), columns=df.columns[5:-1])
-                result.append(padding)
-
-            # 현재 행의 센서 데이터를 가져옴
-            sensor_data = df.iloc[i, 5:-1]
-
-            # 현재 행이 포함된 time_window 데이터 구성
-            if i < time_window - 1:
-                # time_window가 부족한 경우, 0으로 패딩
-                padding = pd.DataFrame(0, index=np.arange(time_window - i - 1), columns=sensor_data.index)
-                window = pd.concat([padding, pd.DataFrame(sensor_data).T], axis=0).reset_index(drop=True)
-            else:
-                # 정상적으로 time_window 크기만큼 데이터 가져오기
-                window = df.iloc[i - time_window + 1:i + 1, 5:-1].reset_index(drop=True)
-
-            # 결과 리스트에 추가
-            result.append(window)
-
-            # 이전 유닛 넘버 업데이트
-            previous_unit_number = current_unit_number
-
-        # 모든 데이터를 리스트에서 결합하여 새로운 DataFrame 생성
-        final_result = np.array(result)  # 3차원 데이터로 변환
-        print("input data")
-        print(final_result)
-
-        return final_result
-    """
-    """
-    def create_time_window_dataset(self, df, time_window):
-        # 10% 확률로 관측한 dataset (20개의 샘플 데이터 모음; unit number 반복됨), 전체 관측 가능한 dataset (unit number가 반복되지 않음)
-        # 위의 두가지 경우를 모두 다룰 수 있도록 코드를 수정함. 기존 코드는 group을 나눠서 unit_number가 바뀌는 시점을 판단했는데,
-        # 10% 관측 데이터에서 그렇게 하면 20개의 샘플 데이터 셋의 같은 unit number data가 하나로 합쳐져서 문제 발생.
-        # 결과를 저장할 리스트
-        result = []
-
-        # 바뀌는 인덱스에 해당하는 데이터 출력
-        print("Changing indices:")
-        # 유닛 번호가 바뀌는 인덱스 목록
-        unit_change_indices = df.index[df['unit_number'].diff() != 0].tolist()
-        print(unit_change_indices)
-        print(df.loc[unit_change_indices])
-
-        # 데이터프레임을 유닛 번호 기준으로 반복
-        for start_index in unit_change_indices:
-            # 현재 유닛의 데이터프레임
-            if start_index == unit_change_indices[-1]:  # 마지막 유닛일 경우
-                group = df[start_index:]
-            else:
-                end_index = unit_change_indices[unit_change_indices.index(start_index) + 1]
-                group = df[start_index:end_index]
-
-            # 인덱스를 재설정
-            group = group.reset_index(drop=True)
-
-            # group 내에서 time_cycles을 기준으로 time_window를 구성
-            for i in range(len(group)):
-                # 6번째 열부터 마지막 열까지만 포함
-                sensor_data = group.iloc[:, 5:-1]
-
-                # time_window에 해당하는 데이터 가져오기
-                if i < time_window - 1:
-                    # time_window가 부족한 경우, 0으로 패딩
-                    padding = pd.DataFrame(0, index=np.arange(time_window - i - 1), columns=sensor_data.columns)
-                    window = pd.concat([padding, sensor_data.iloc[:i + 1]], axis=0).reset_index(drop=True)
-                else:
-                    # 정상적으로 time_window 크기만큼 데이터 가져오기
-                    window = sensor_data.iloc[i - time_window + 1:i + 1].reset_index(drop=True)
-
-                # 결과 리스트에 추가
-                result.append(window)
-
-        # 모든 데이터를 리스트에서 결합하여 새로운 배열 생성
-        final_result = np.array(result)  # 3차원 데이터로 변환
-        print("input data")
-        print(final_result)
-
-        return final_result
-    """
-
-
-    # 원본 method #
-    def create_time_window_dataset(self, df, time_window):
+        # DCNN의 input으로 넣을 feature 생성.
         # 결과를 저장할 리스트
         result = []
         # 각 unit_number별로 데이터를 그룹화
@@ -2354,7 +2101,7 @@ class RunSimulation():
         if self.DCNN_is_fully_observe: # 모든 데이터 관측 가능할 때.
             x_train, y_train, obs_time, is_last_time_cycle = self.generate_input_for_DCNN(True)  # True면 train data, label 반환 (False면 valid data, label 반환).
         else: # 10% 확률로 관측 가능할 때.
-            x_train, y_train = self.generate_input_for_DCNN_observe_10(True)
+            x_train, y_train, obs_time, is_last_time_cycle = self.generate_input_for_DCNN_observe_10(True)
 
         # Ensure x_train, y_train, obs_time, is_last_time_cycle is a numpy array (tensor로 변환하려면 numpy array여야 함.)
         x_train = np.ascontiguousarray(np.array(x_train, dtype=np.float32))  # Convert to contiguous numpy array
@@ -2363,23 +2110,20 @@ class RunSimulation():
         obs_time = obs_time.to_numpy(dtype=np.float32)
         is_last_time_cycle = is_last_time_cycle.to_numpy(dtype=np.float32)
 
-        """ # 제대로 tensor로 변환되었는지 확인용 코드.
-        print('obs_time')
-        print(obs_time)
-        print(obs_time.shape)
-        print('is_last_time_cycle')
-        print(is_last_time_cycle)
-        print(is_last_time_cycle.shape)
-        print('y_train')
-        print(y_train)
-        print(y_train.shape)
-        """
-
         # Assuming x_train and y_train are preloaded tensors
         trainer.train_model(x_train, y_train, obs_time, is_last_time_cycle) # 여기서 ObsTime, is_last_time_cycle이 인자로 전달되어야 함.
 
         # model 학습 후 저장.
         trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)
+
+
+    def RUL_prediction_using_saved_pth(self, is_partial_observe):
+        # 10% 관측 가능할 때 전용 method.
+        # Model creation
+        model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc,
+                     self.DCNN_dropout_rate)
+        trainer = DCNN_Model(model, self.DCNN_batch_size, self.DCNN_epochs, self.DCNN_is_td_loss, self.td_alpha,
+                             self.td_beta, self.td_simulation_threshold)
 
         # test를 위한 data 생성.
         if self.DCNN_is_fully_observe:
@@ -2387,20 +2131,40 @@ class RunSimulation():
         else:
             x_valid, y_valid = self.generate_input_for_DCNN_observe_10(False)  # False면 valid data, label 반환.
 
-
         x_valid = np.ascontiguousarray(np.array(x_valid, dtype=np.float32))  # Convert to contiguous numpy array
         y_valid = y_valid.to_numpy(dtype=np.float32)  # Convert pandas Series to numpy array
 
         # 모델 로드 후 predict
         trainer.load_model()  # 기본 파일명을 사용하여 로드 (다른 pth load 하려면 바꿔줘야 함. 나중에 기능 추가하자)
         predictions = trainer.predict(x_valid)
+        print(predictions)
+        print(predictions.shape)
 
+        # dataframe 다시 만들기
+        self.drop_columns = ['s_1', 's_5', 's_6', 's_10', 's_16', 's_18', 's_19']
+        # Test용 dataset initialize.
+        self.valid_dataset = pd.DataFrame()
+
+        # 샘플링한 데이터셋을 이어붙임 (# 10% 관측 가능할 때 전용 method).
+        # 전체 데이터에 대한 경우도 적용하고 싶으면 is_partial_observe를 이용해서 valid_dataset을 전체 데이터로 만들자.
+        for data_sample_index in range(self.num_sample_datasets):
+            new_data = self.sampled_datasets_with_RUL[data_sample_index][1].copy()
+            self.valid_dataset = pd.concat([self.valid_dataset, new_data], ignore_index=True)
+
+
+        print('valid_dataset')
+        print(self.valid_dataset)
+        print(self.valid_dataset.shape)
 
         # 마지막 샘플만 RUL plot (valid 1개 샘플 사이즈는 650. 나중에 수정; 10% 관측의 경우)
-        self.valid_data_DCNN['predicted_RUL'] = predictions
-        print(self.valid_data_DCNN)
+        self.valid_dataset['predicted_RUL'] = predictions
+        print(self.valid_dataset)
 
-        last_sample = self.valid_data_DCNN.tail(6500)
+        if is_partial_observe:
+            last_sample = self.valid_dataset.tail(650) # 10%만 관측 가능할 때.
+        else:
+            last_sample = self.valid_dataset.tail(6500) # 전체 데이터 관측 가능할 때.
+
         print(last_sample)
         self.env.plot_RUL_prediction_by_DCNN(last_sample, self.td_simulation_threshold)
 
@@ -2438,18 +2202,20 @@ class RunSimulation():
 
 
 """generate instance"""
-run_sim = RunSimulation('config_009.ini')
-
+#run_sim = RunSimulation('config_009.ini')
+#run_sim = RunSimulation('config_010.ini') # 10% 관측, TD Loss, alpha 0.1, theta 0
+#run_sim = RunSimulation('config_011.ini') # 10% 관측, MSE
+#run_sim = RunSimulation('config_012.ini')  # 10% 관측, TD Loss, alpha 0.9, theta 0
+run_sim = RunSimulation('config_013.ini')  # 10% 관측, TD Loss, alpha 0.5, theta 0
 """ ###############################
 Deep Convolution Neural Network
 """
-#run_sim_obs_10 = RunSimulation('config_010.ini') # 10% 확률로 관측 가능할 때의 instance 생성.
 
-run_sim.run_DCNN()         # 전체 데이터 관측 가능.
-#run_sim_obs_10.run_DCNN()  # 10% 데이터만 관측.
+run_sim.run_DCNN()  # DCNN 학습.
 
-#run_sim.generate_input_for_DCNN(True)
-#run_sim_obs_10.generate_input_for_DCNN_observe_10(True) # input 잘 만들어지는지 확인
+#run_sim.RUL_prediction_using_saved_pth(is_partial_observe = False) # 학습된 모델로 RUL prediction 수행 (모든 데이터 관측 가능).
+run_sim.RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
+
 
 
 """ ################################
