@@ -1,7 +1,6 @@
 """
 * Author : Yonghwan Yim
-* DCNN Version 1
-* Final update : 2024.09.26
+* Final update : 2024.10.16
 """
 # Custom TD Loss function
 from CustomTDLoss import CustomTDLoss
