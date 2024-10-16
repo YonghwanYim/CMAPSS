@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
+# 이 파일은 의미 없음. (TD Loss에 max operator를 고려하지 않았을 때 버전임)
 
 # simulation.py 에서 사용할 때, data sample의 수 만큼 처음에 초기화해두고 가져다 쓰도록 구현.
 class DecisionAwareTD:
