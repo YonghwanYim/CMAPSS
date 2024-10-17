@@ -1995,8 +1995,6 @@ class RunSimulation():
 
         # 모든 데이터를 리스트에서 결합하여 새로운 DataFrame 생성
         final_result = np.array(result)  # 3차원 데이터로 변환
-        print("input data")
-        print(final_result)
 
         return final_result
 
@@ -2116,8 +2114,7 @@ class RunSimulation():
         # model 학습 후 저장.
         trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)
 
-
-    def RUL_prediction_using_saved_pth(self, is_partial_observe):
+    def add_predicted_RUL_using_saved_pth(self):
         # 10% 관측 가능할 때 전용 method.
         # Model creation
         model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc,
@@ -2137,8 +2134,6 @@ class RunSimulation():
         # 모델 로드 후 predict
         trainer.load_model()  # 기본 파일명을 사용하여 로드 (다른 pth load 하려면 바꿔줘야 함. 나중에 기능 추가하자)
         predictions = trainer.predict(x_valid)
-        print(predictions)
-        print(predictions.shape)
 
         # dataframe 다시 만들기
         self.drop_columns = ['s_1', 's_5', 's_6', 's_10', 's_16', 's_18', 's_19']
@@ -2151,19 +2146,21 @@ class RunSimulation():
             new_data = self.sampled_datasets_with_RUL[data_sample_index][1].copy()
             self.valid_dataset = pd.concat([self.valid_dataset, new_data], ignore_index=True)
 
+        self.valid_dataset['predicted_RUL'] = predictions
 
-        print('valid_dataset')
-        print(self.valid_dataset)
-        print(self.valid_dataset.shape)
+        return self.valid_dataset
+
+
+
+    def plot_RUL_prediction_using_saved_pth(self, is_partial_observe):
+        # predicted RUL column을 추가.
+        valid_data_with_predicted_RUL = self.add_predicted_RUL_using_saved_pth()
 
         # 마지막 샘플만 RUL plot (valid 1개 샘플 사이즈는 650. 나중에 수정; 10% 관측의 경우)
-        self.valid_dataset['predicted_RUL'] = predictions
-        print(self.valid_dataset)
-
         if is_partial_observe:
-            last_sample = self.valid_dataset.tail(650) # 10%만 관측 가능할 때.
+            last_sample = valid_data_with_predicted_RUL.tail(650) # 10%만 관측 가능할 때.
         else:
-            last_sample = self.valid_dataset.tail(6500) # 전체 데이터 관측 가능할 때.
+            last_sample = valid_data_with_predicted_RUL.tail(6500) # 전체 데이터 관측 가능할 때.
 
         print(last_sample)
         self.env.plot_RUL_prediction_by_DCNN(last_sample, self.td_simulation_threshold)
@@ -2203,18 +2200,18 @@ class RunSimulation():
 
 """generate instance"""
 #run_sim = RunSimulation('config_009.ini')
-#run_sim = RunSimulation('config_010.ini') # 10% 관측, TD Loss, alpha 0.1, theta 0
+run_sim = RunSimulation('config_010.ini') # 10% 관측, TD Loss, alpha 0.1, theta 0
 #run_sim = RunSimulation('config_011.ini') # 10% 관측, MSE
 #run_sim = RunSimulation('config_012.ini')  # 10% 관측, TD Loss, alpha 0.9, theta 0
-run_sim = RunSimulation('config_013.ini')  # 10% 관측, TD Loss, alpha 0.5, theta 0
+#run_sim = RunSimulation('config_013.ini')  # 10% 관측, TD Loss, alpha 0.5, theta 0
 """ ###############################
 Deep Convolution Neural Network
 """
 
-run_sim.run_DCNN()  # DCNN 학습.
+#run_sim.run_DCNN()  # DCNN 학습.
 
-#run_sim.RUL_prediction_using_saved_pth(is_partial_observe = False) # 학습된 모델로 RUL prediction 수행 (모든 데이터 관측 가능).
-run_sim.RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
+#run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = False) # 학습된 모델로 RUL prediction 수행 (모든 데이터 관측 가능).
+run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
 
 
 

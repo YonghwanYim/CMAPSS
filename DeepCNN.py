@@ -86,7 +86,7 @@ class DCNN_Model:
         print(f"Is MPS device available: {torch.backends.mps.is_available()}")
 
     def lr_schedule(self, epoch):
-        if epoch < 200:
+        if epoch < 500:
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = 0.001
         else:
