@@ -2229,8 +2229,8 @@ class RunSimulation():
 
 """generate instance"""
 #run_sim = RunSimulation('config_009.ini')
-run_sim = RunSimulation('config_010.ini') # 10% 관측, TD Loss, alpha 0.1, theta 0
-#run_sim = RunSimulation('config_011.ini') # 10% 관측, MSE
+#run_sim = RunSimulation('config_010.ini') # 10% 관측, TD Loss, alpha 0.1, theta 0
+run_sim = RunSimulation('config_011.ini') # 10% 관측, MSE
 #run_sim = RunSimulation('config_012.ini')  # 10% 관측, TD Loss, alpha 0.9, theta 0
 #run_sim = RunSimulation('config_013.ini')  # 10% 관측, TD Loss, alpha 0.5, theta 0
 """ ###############################
