@@ -1941,7 +1941,7 @@ class RunSimulation():
             valid_data_tmp = self.create_time_window_dataset(valid_data_tmp, self.DCNN_N_tw)
             self.valid_data_DCNN = np.concatenate([self.valid_data_DCNN, valid_data_tmp], axis=0)
 
-            print(f"Processed sample index: {data_sample_index}")
+            #print(f"Processed sample index: {data_sample_index}")
 
         # is_train이 true면 train dataset 반환, false면 valid dataset 반환.
         if is_train:
@@ -2116,6 +2116,7 @@ class RunSimulation():
 
     def add_predicted_RUL_using_saved_pth(self):
         # 10% 관측 가능할 때 전용 method.
+        # 나중에 전체 관측 가능할 때의 return도 해주는 코드 추가하자.
         # Model creation
         model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc,
                      self.DCNN_dropout_rate)
@@ -2150,6 +2151,34 @@ class RunSimulation():
 
         return self.valid_dataset
 
+    def simulation_random_observation_merged_sample_data(self, threshold):
+        # 일단 random observation 상황에서만 짜보자. unit number가 반복되니.
+        # 마저 만들어야 함.
+        dataset = self.add_predicted_RUL_using_saved_pth()
+
+        replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
+        state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
+        num_of_step = 0
+        total_operation_time = 0
+
+        # Data processing
+        dataset['predicted_RUL_threshold'] = dataset['predicted_RUL'] - threshold # y^ - threshold
+        dataset = dataset.drop(columns = dataset.columns[2:26]) # remove feature columns
+        dataset['is_last_time_cycle'] = 0  # is_last_time_cycle 추가 마지막 time cycle이면 1을 저장.
+        dataset.loc[len(dataset) - 1, 'is_last_time_cycle'] = 1 # 마지막 인덱스를 1로 설정.
+        # RUL 값이 증가하는 시점의 직전 인덱스에 1을 기록
+        for i in range(1, len(dataset)):
+            if dataset.loc[i, 'RUL'] > dataset.loc[i - 1, 'RUL']:
+                dataset.loc[i - 1, 'is_last_time_cycle'] = 1
+
+        # action이 continue면 1, replace면 0.
+        dataset['is_continue'] = np.where(dataset['predicted_RUL_threshold'] > 0, 1, 0)
+
+
+        print(dataset)
+        print(dataset['is_last_time_cycle'].sum())
+        print(dataset.head(25))
+        print(dataset.loc[:, ['predicted_RUL_threshold', 'is_continue', 'is_last_time_cycle']].head(25))
 
 
     def plot_RUL_prediction_using_saved_pth(self, is_partial_observe):
@@ -2209,9 +2238,9 @@ Deep Convolution Neural Network
 """
 
 #run_sim.run_DCNN()  # DCNN 학습.
-
+run_sim.simulation_random_observation_merged_sample_data(100) # 나중엔 threshold를 순차적으로 넣고 돌려야 함
 #run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = False) # 학습된 모델로 RUL prediction 수행 (모든 데이터 관측 가능).
-run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
+#run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
 
 
 

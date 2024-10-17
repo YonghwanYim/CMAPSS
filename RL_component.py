@@ -34,6 +34,7 @@ class Environment:
 
 class Agent:
     def __init__(self, actions=["continue", "replace"]):
+
         self.actions = actions
         # Linear Function Approximation (value-based)
         self.weights = {action: np.random.normal(loc=0, scale=0.5, size=21) for action in actions}
