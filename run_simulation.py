@@ -1893,7 +1893,6 @@ class RunSimulation():
             # test인 경우는 return이 2개.
             return x_feature, self.y_label
 
-
     def generate_input_for_DCNN_observe_10(self, is_train):
         # 10%만 관측 가능할때의 input 생성.
         # 사용하지 않는 센서 column 삭제 (DCNN paper).
@@ -2114,9 +2113,44 @@ class RunSimulation():
         # model 학습 후 저장.
         trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)
 
-    def add_predicted_RUL_using_saved_pth(self):
+
+    def add_predicted_RUL_using_saved_pth_full_observe(self):
+        # 전체 관측 가능할 때 전용 method.
+        # Model creation
+        model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc,
+                     self.DCNN_dropout_rate)
+        trainer = DCNN_Model(model, self.DCNN_batch_size, self.DCNN_epochs, self.DCNN_is_td_loss, self.td_alpha,
+                             self.td_beta, self.td_simulation_threshold)
+
+        # test를 위한 data 생성.
+        if self.DCNN_is_fully_observe:
+            x_valid, y_valid = self.generate_input_for_DCNN(False)  # False면 valid data, label 반환.
+        else:
+            x_valid, y_valid = self.generate_input_for_DCNN_observe_10(False)  # False면 valid data, label 반환.
+
+        x_valid = np.ascontiguousarray(np.array(x_valid, dtype=np.float32))  # Convert to contiguous numpy array
+        y_valid = y_valid.to_numpy(dtype=np.float32)  # Convert pandas Series to numpy array
+
+        # 모델 로드 후 predict
+        trainer.load_model()  # 기본 파일명을 사용하여 로드 (다른 pth load 하려면 바꿔줘야 함. 나중에 기능 추가하자)
+        predictions = trainer.predict(x_valid)
+
+        # dataframe 다시 만들기
+        self.drop_columns = ['s_1', 's_5', 's_6', 's_10', 's_16', 's_18', 's_19']
+        # 사용하는 것은 valid_dataset만.
+        self.train_dataset, self.valid_dataset, self.full_dataset = self.env.load_data(self.num_dataset, self.split_unit_number)
+
+        # 여기서 RUL이 포함된 데이터셋을 load 해야함.
+        self.valid_dataset = self.valid_dataset.drop(columns=self.drop_columns, errors='ignore')
+        self.valid_dataset = self.env.data_scaler_only_sensor(self.valid_dataset)
+        self.valid_dataset = self.env.add_RUL_column(self.valid_dataset)
+
+        self.valid_dataset['predicted_RUL'] = predictions
+
+        return self.valid_dataset
+
+    def add_predicted_RUL_using_saved_pth_partial_observe(self):
         # 10% 관측 가능할 때 전용 method.
-        # 나중에 전체 관측 가능할 때의 return도 해주는 코드 추가하자.
         # Model creation
         model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc,
                      self.DCNN_dropout_rate)
@@ -2154,45 +2188,136 @@ class RunSimulation():
     def simulation_random_observation_merged_sample_data(self, threshold):
         # 일단 random observation 상황에서만 짜보자. unit number가 반복되니.
         # 마저 만들어야 함.
-        dataset = self.add_predicted_RUL_using_saved_pth()
-
-        replace_failure = 0  # each episode 마다 초기화. 누적시킬 필요는 없음.
-        state_index = 0  # state index -> index pointer로 취급하자. (episode 마다 초기화)
-        num_of_step = 0
-        total_operation_time = 0
+        dataset = self.add_predicted_RUL_using_saved_pth_partial_observe()
 
         # Data processing
         dataset['predicted_RUL_threshold'] = dataset['predicted_RUL'] - threshold # y^ - threshold
         dataset = dataset.drop(columns = dataset.columns[2:26]) # remove feature columns
         dataset['is_last_time_cycle'] = 0  # is_last_time_cycle 추가 마지막 time cycle이면 1을 저장.
         dataset.loc[len(dataset) - 1, 'is_last_time_cycle'] = 1 # 마지막 인덱스를 1로 설정.
-        # RUL 값이 증가하는 시점의 직전 인덱스에 1을 기록
+
+        # RUL 값이 증가하는 시점의 직전 인덱스에 1을 기록 (엔진 내의 마지막 관측치면 1, 아니면 0)
         for i in range(1, len(dataset)):
             if dataset.loc[i, 'RUL'] > dataset.loc[i - 1, 'RUL']:
                 dataset.loc[i - 1, 'is_last_time_cycle'] = 1
 
-        # action이 continue면 1, replace면 0.
+        # action이 continue면 1, replace면 0
         dataset['is_continue'] = np.where(dataset['predicted_RUL_threshold'] > 0, 1, 0)
 
+        # 위의 코드만으로는 이미 replace가 일어난 이후에는 continue 할 수 없다는 것이 반영되어있지 않음.
+        # 따라서 엔진 내에서 replace가 발생 (is_continue = 0)하면, 이후의 is_continue는 모두 0으로 처리)
+        for i in range(2, len(dataset)):
+            if dataset.loc[i, 'is_continue'] == 1 and dataset.loc[i - 1, 'is_continue'] == 0 and dataset.loc[
+                i - 1, 'is_last_time_cycle'] == 0:
+                #print(f"event! index : {i}")
+                dataset.loc[i, 'is_continue'] = 0
 
-        print(dataset)
-        print(dataset['is_last_time_cycle'].sum())
-        print(dataset.head(25))
-        print(dataset.loc[:, ['predicted_RUL_threshold', 'is_continue', 'is_last_time_cycle']].head(25))
+        # 'is_replace_failure' = 'is_last_time_cycle' * 'is_continue' (마지막 사이클에서 continue 한 경우)
+        dataset['is_replace_failure'] = dataset['is_last_time_cycle'] * dataset['is_continue']
 
+        # usage_time 열을 추가 (엔진 별 누적 사용 시간).
+        dataset['usage_time'] = 0
+        for i in range(1, len(dataset)):
+            if dataset.loc[i, 'is_continue'] == 0 and dataset.loc[i - 1, 'is_last_time_cycle'] == 0 and dataset.loc[
+                i - 1, 'is_continue'] == 1:
+                dataset.loc[i, 'usage_time'] = dataset.loc[i, 'time_cycles']
+
+        # 'is_replace_failure'가 1인 인덱스의 'usage_time'을 해당 인덱스의 'time_cycles'로 설정
+        dataset.loc[dataset['is_replace_failure'] == 1, 'usage_time'] = dataset['time_cycles']
+
+        total_number_of_engines = dataset['is_last_time_cycle'].sum()
+        total_operation_time = dataset['usage_time'].sum()
+        replace_failure = dataset['is_replace_failure'].sum()
+
+        average_usage_time_per_engine = total_operation_time / total_number_of_engines
+        average_cost_per_engine = (-self.REWARD_ACTUAL_REPLACE * (total_number_of_engines - replace_failure) - self.REWARD_ACTUAL_FAILURE * replace_failure) / total_number_of_engines
+        p_failure = replace_failure / total_number_of_engines
+        average_cost_per_time = average_cost_per_engine / average_usage_time_per_engine # a.k.a. lambda
+        beta = average_cost_per_time / (-self.REWARD_ACTUAL_FAILURE + self.REWARD_ACTUAL_REPLACE) # by formula
+
+        print(f"Theta : {threshold}, AUT : {average_usage_time_per_engine}, P_failure : {p_failure}, Lambda : {average_cost_per_time}, Beta : {beta}")
+
+        return threshold, average_usage_time_per_engine, p_failure, average_cost_per_time, beta
+
+
+    def generate_threshold_simulation_data(self, start=41, end=50, step=1):
+        # simulation_random_observation_merged_sample_data를 threshold를 바꿔가며 실행.
+        # theta^*을 찾기 위한 method.
+        results_df = pd.DataFrame(
+            columns=["threshold", "average_usage_time_per_engine", "p_failure", "average_cost_per_time", "beta"])
+
+        # threshold 값을 start부터 end까지 step 간격으로 증가시키며 반복
+        for threshold in [start + x * step for x in range(int((end - start) / step) + 1)]:
+            # 각 threshold에 대해 함수 호출
+            threshold, avg_usage_time, p_failure, avg_cost_per_time, beta = self.simulation_random_observation_merged_sample_data(
+                threshold)
+
+            # 반환된 값을 한 행으로 데이터프레임에 추가
+            new_row = pd.DataFrame({
+                "threshold": [threshold],
+                "average_usage_time_per_engine": [avg_usage_time],
+                "p_failure": [p_failure],
+                "average_cost_per_time": [avg_cost_per_time],
+                "beta": [beta]
+            })
+
+            # concat을 사용하여 새로운 행을 추가
+            results_df = pd.concat([results_df, new_row], ignore_index=True)
+
+        self.plot_threshold_vs_cost(results_df)
+
+        return results_df
+
+    def plot_threshold_vs_cost(self, df):
+        # average_cost_per_time이 최소가 되는 행을 찾음
+        min_cost_row = df.loc[df['average_cost_per_time'].idxmin()]
+
+        # Plot 생성
+        plt.figure(figsize=(10, 6))
+        plt.plot(df['threshold'], df['average_cost_per_time'], label='Average Cost per Time')
+
+        # 최소값에 해당하는 threshold에 빨간 점 표시
+        plt.scatter(min_cost_row['threshold'], min_cost_row['average_cost_per_time'], color='red',
+                    label=f"Min Cost at threshold={min_cost_row['threshold']:.2f}")
+
+        # Labeling
+        plt.xlabel('Threshold')
+        plt.ylabel('Average Cost per Time')
+        plt.title('Threshold vs. Average Cost per Time')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        # 최소 average_cost_per_time에 해당하는 행의 값 출력
+        print("Row with minimum average_cost_per_time:")
+        print(min_cost_row)
 
     def plot_RUL_prediction_using_saved_pth(self, is_partial_observe):
         # predicted RUL column을 추가.
-        valid_data_with_predicted_RUL = self.add_predicted_RUL_using_saved_pth()
+        # 여기서 is_partial_obeserve에 따라 다른 method로 데이터 프레임을 생성.
+        if is_partial_observe:
+            valid_data_with_predicted_RUL = self.add_predicted_RUL_using_saved_pth_partial_observe()
+        else:
+            valid_data_with_predicted_RUL = self.add_predicted_RUL_using_saved_pth_full_observe()
 
         # 마지막 샘플만 RUL plot (valid 1개 샘플 사이즈는 650. 나중에 수정; 10% 관측의 경우)
         if is_partial_observe:
             last_sample = valid_data_with_predicted_RUL.tail(650) # 10%만 관측 가능할 때.
         else:
-            last_sample = valid_data_with_predicted_RUL.tail(6500) # 전체 데이터 관측 가능할 때.
+            last_sample = valid_data_with_predicted_RUL.tail(6501) # 전체 데이터 관측 가능할 때.
 
         print(last_sample)
         self.env.plot_RUL_prediction_by_DCNN(last_sample, self.td_simulation_threshold)
+
+        # valid data의 MSE 출력.
+        mse_value = self.calculate_MSE_loss(valid_data_with_predicted_RUL)
+        print(f"MSE between RUL and predicted_RUL: {mse_value}")
+
+    def calculate_MSE_loss(self, dataset):
+        true_rul = torch.tensor(dataset['RUL'].values, dtype=torch.float32)
+        predicted_rul = torch.tensor(dataset['predicted_RUL'].values, dtype=torch.float32)
+        mse = torch.mean((true_rul - predicted_rul) ** 2)
+        return mse.item()
 
     def plot_prediction_decision_loss_by_threshold(self):
         # threshold에 따른 prediction loss, decision loss, time average cost 비교 plot.
@@ -2228,20 +2353,31 @@ class RunSimulation():
 
 
 """generate instance"""
-#run_sim = RunSimulation('config_009.ini')
-#run_sim = RunSimulation('config_010.ini') # 10% 관측, TD Loss, alpha 0.1, theta 0
-run_sim = RunSimulation('config_011.ini') # 10% 관측, MSE
+#run_sim = RunSimulation('config_009.ini')   # 전체 관측, (MSE) or (TD Loss, alpha 0.1, theta 0)
+#run_sim = RunSimulation('config_010.ini')  # 10% 관측, TD Loss, alpha 0.1, theta 0
+run_sim = RunSimulation('config_011.ini')  # 10% 관측, MSE Loss (3000 epoch)
 #run_sim = RunSimulation('config_012.ini')  # 10% 관측, TD Loss, alpha 0.9, theta 0
 #run_sim = RunSimulation('config_013.ini')  # 10% 관측, TD Loss, alpha 0.5, theta 0
+#run_sim = RunSimulation('config_014.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 0, beta 0.000684
+#run_sim = RunSimulation('config_015.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 0, beta 0.001370
+#run_sim = RunSimulation('config_016.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 42.7, beta 0.001370
+#run_sim = RunSimulation('config_017.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 42.7, beta 0.001370
+#run_sim = RunSimulation('config_018.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 42.7, beta 0.001370
+
+
+
 """ ###############################
 Deep Convolution Neural Network
 """
+run_sim.run_DCNN()  # DCNN 학습.
 
-#run_sim.run_DCNN()  # DCNN 학습.
-run_sim.simulation_random_observation_merged_sample_data(100) # 나중엔 threshold를 순차적으로 넣고 돌려야 함
+#run_sim.simulation_random_observation_merged_sample_data(30) # 학습한 모델로 threshold 0에서 테스트
+
 #run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = False) # 학습된 모델로 RUL prediction 수행 (모든 데이터 관측 가능).
-#run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
+run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
 
+
+run_sim.generate_threshold_simulation_data() # Find optimal theta. (MSE로 학습시킨 모델로 찾음.)
 
 
 """ ################################
