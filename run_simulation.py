@@ -2240,7 +2240,7 @@ class RunSimulation():
         return threshold, average_usage_time_per_engine, p_failure, average_cost_per_time, beta
 
 
-    def generate_threshold_simulation_data(self, start=41, end=50, step=1):
+    def generate_threshold_simulation_data(self, start=0, end=100, step=1):
         # simulation_random_observation_merged_sample_data를 threshold를 바꿔가며 실행.
         # theta^*을 찾기 위한 method.
         results_df = pd.DataFrame(
@@ -2355,7 +2355,7 @@ class RunSimulation():
 """generate instance"""
 #run_sim = RunSimulation('config_009.ini')   # 전체 관측, (MSE) or (TD Loss, alpha 0.1, theta 0)
 #run_sim = RunSimulation('config_010.ini')  # 10% 관측, TD Loss, alpha 0.1, theta 0
-run_sim = RunSimulation('config_011.ini')  # 10% 관측, MSE Loss (3000 epoch)
+#run_sim = RunSimulation('config_011.ini')  # 10% 관측, MSE Loss (2000 epoch)
 #run_sim = RunSimulation('config_012.ini')  # 10% 관측, TD Loss, alpha 0.9, theta 0
 #run_sim = RunSimulation('config_013.ini')  # 10% 관측, TD Loss, alpha 0.5, theta 0
 #run_sim = RunSimulation('config_014.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 0, beta 0.000684
@@ -2363,18 +2363,19 @@ run_sim = RunSimulation('config_011.ini')  # 10% 관측, MSE Loss (3000 epoch)
 #run_sim = RunSimulation('config_016.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 42.7, beta 0.001370
 #run_sim = RunSimulation('config_017.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 42.7, beta 0.001370
 #run_sim = RunSimulation('config_018.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 42.7, beta 0.001370
+run_sim = RunSimulation('config_019.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 58.8, beta 0.000701 (2000 epoch)
 
 
 
 """ ###############################
 Deep Convolution Neural Network
 """
-run_sim.run_DCNN()  # DCNN 학습.
+#run_sim.run_DCNN()  # DCNN 학습.
 
 #run_sim.simulation_random_observation_merged_sample_data(30) # 학습한 모델로 threshold 0에서 테스트
 
 #run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = False) # 학습된 모델로 RUL prediction 수행 (모든 데이터 관측 가능).
-run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
+#run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
 
 
 run_sim.generate_threshold_simulation_data() # Find optimal theta. (MSE로 학습시킨 모델로 찾음.)
