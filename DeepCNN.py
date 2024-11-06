@@ -93,7 +93,7 @@ class DCNN_Model:
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = 0.0001
 
-    def train_model(self, x_train, y_train, obs_time, is_last_time_cycle):
+    def train_model(self, x_train, y_train, obs_time, is_last_time_cycle, is_continue_learning=False):
         # Training loop (assuming x_train is N × 30 × 14 and y_train is N)
         self.model.train()
         #self.model.eval() # dropout 영향 test용 코드.
@@ -115,6 +115,9 @@ class DCNN_Model:
         print(x_train)
         print('y_train')
         print(y_train)
+
+        if is_continue_learning: # 이미 학습된 weight을 이어서 학습시킬 때 사용하는 코드 (MSE Loss로 학습시킨 모델 이어서 할 때)
+            self.load_model(filename='dcnn_model.pth')
 
         for epoch in range(self.epochs):
             # Adjust learning rate

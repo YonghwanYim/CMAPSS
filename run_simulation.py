@@ -2088,7 +2088,7 @@ class RunSimulation():
 
     def run_DCNN(self):
         # DCNN 학습, 예측치 저장까지 하나의 method로 구성.
-        # 인자 하나 추가해서, 10% 확률로 관측했을때 data 스위칭 할 수 있도록 하자.
+        # 초기 학습용.
 
         # Model creation
         model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc, self.DCNN_dropout_rate)
@@ -2108,10 +2108,45 @@ class RunSimulation():
         is_last_time_cycle = is_last_time_cycle.to_numpy(dtype=np.float32)
 
         # Assuming x_train and y_train are preloaded tensors
-        trainer.train_model(x_train, y_train, obs_time, is_last_time_cycle) # 여기서 ObsTime, is_last_time_cycle이 인자로 전달되어야 함.
+        # 여기서 ObsTime, is_last_time_cycle이 인자로 전달되어야 함 (td loss로 학습시키지 않더라도 전달은 함. DeepCNN에서 알아서 처리).
+        trainer.train_model(x_train, y_train, obs_time, is_last_time_cycle, is_continue_learning = False)
 
         # model 학습 후 저장.
         trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)
+
+    def run_continue_DCNN(self):
+        # DCNN 학습, 예측치 저장까지 하나의 method로 구성.
+        # 이미 학습된 weight을 바탕으로 Loss를 바꿔 이어서 학습하는 코드.
+
+        # Model creation
+        model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc, self.DCNN_dropout_rate)
+        trainer = DCNN_Model(model, self.DCNN_batch_size, self.DCNN_epochs, self.DCNN_is_td_loss, self.td_alpha, self.td_beta, self.td_simulation_threshold)
+
+        # Training을 위한 data 생성.
+        if self.DCNN_is_fully_observe: # 모든 데이터 관측 가능할 때.
+            x_train, y_train, obs_time, is_last_time_cycle = self.generate_input_for_DCNN(True)  # True면 train data, label 반환 (False면 valid data, label 반환).
+        else: # 10% 확률로 관측 가능할 때.
+            x_train, y_train, obs_time, is_last_time_cycle = self.generate_input_for_DCNN_observe_10(True)
+
+        # Ensure x_train, y_train, obs_time, is_last_time_cycle is a numpy array (tensor로 변환하려면 numpy array여야 함.)
+        x_train = np.ascontiguousarray(np.array(x_train, dtype=np.float32))  # Convert to contiguous numpy array
+        # Convert pandas Series to numpy array
+        y_train = y_train.to_numpy(dtype=np.float32)
+        obs_time = obs_time.to_numpy(dtype=np.float32)
+        is_last_time_cycle = is_last_time_cycle.to_numpy(dtype=np.float32)
+
+        # 모델 학습 전, 현재 weight으로 성능 확인 (beta system의 reward도 함께)
+        self.simulation_random_observation_merged_sample_data(self.td_simulation_threshold, is_train_data=True)
+
+        # Assuming x_train and y_train are preloaded tensors
+        # 여기서 ObsTime, is_last_time_cycle이 인자로 전달되어야 함 (td loss로 학습시키지 않더라도 전달은 함. DeepCNN에서 알아서 처리).
+        trainer.train_model(x_train, y_train, obs_time, is_last_time_cycle, is_continue_learning=True) # 이어서 학습
+
+        # model 학습 후 저장.
+        trainer.save_model() # 별도 경로 지정 없이 저장 (현재 파일이 있는 디렉토리)
+
+        # 모델 학습 후, 현재 weight으로 성능 확인 (beta system의 reward도 함께)
+        self.simulation_random_observation_merged_sample_data(self.td_simulation_threshold, is_train_data=True)
 
 
     def add_predicted_RUL_using_saved_pth_full_observe(self):
@@ -2149,7 +2184,7 @@ class RunSimulation():
 
         return self.valid_dataset
 
-    def add_predicted_RUL_using_saved_pth_partial_observe(self):
+    def add_predicted_RUL_using_saved_pth_partial_observe(self, is_train_data=False):
         # 10% 관측 가능할 때 전용 method.
         # Model creation
         model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc,
@@ -2159,9 +2194,12 @@ class RunSimulation():
 
         # test를 위한 data 생성.
         if self.DCNN_is_fully_observe:
-            x_valid, y_valid = self.generate_input_for_DCNN(False)  # False면 valid data, label 반환.
+            x_valid, y_valid = self.generate_input_for_DCNN(is_train_data)  # is_train_data가 False면 valid data, label 반환.
         else:
-            x_valid, y_valid = self.generate_input_for_DCNN_observe_10(False)  # False면 valid data, label 반환.
+            if is_train_data: # 코드의 통일을 위해 x_valid, y_valid라고 뒀지만, train data로 테스트 하는 코드임 (is_train_data = True일 때).
+                x_valid, y_valid, obs_time, is_last_time_cycle = self.generate_input_for_DCNN_observe_10(is_train_data)
+            else:
+                x_valid, y_valid = self.generate_input_for_DCNN_observe_10(is_train_data)  # is_train_data가 False면 valid data, label 반환.
 
         x_valid = np.ascontiguousarray(np.array(x_valid, dtype=np.float32))  # Convert to contiguous numpy array
         y_valid = y_valid.to_numpy(dtype=np.float32)  # Convert pandas Series to numpy array
@@ -2177,18 +2215,24 @@ class RunSimulation():
 
         # 샘플링한 데이터셋을 이어붙임 (# 10% 관측 가능할 때 전용 method).
         # 전체 데이터에 대한 경우도 적용하고 싶으면 is_partial_observe를 이용해서 valid_dataset을 전체 데이터로 만들자.
+
+        # index에 따라 train, valid, full data로 나뉨.
+        train_valid_switching_index = 1 # default는 valid 데이터.
+        if is_train_data:
+            train_valid_switching_index = 0 # train data로 시뮬레이션 할 때는 index를 0으로 변경
+
         for data_sample_index in range(self.num_sample_datasets):
-            new_data = self.sampled_datasets_with_RUL[data_sample_index][1].copy()
+            new_data = self.sampled_datasets_with_RUL[data_sample_index][train_valid_switching_index].copy()
             self.valid_dataset = pd.concat([self.valid_dataset, new_data], ignore_index=True)
 
         self.valid_dataset['predicted_RUL'] = predictions
 
         return self.valid_dataset
 
-    def simulation_random_observation_merged_sample_data(self, threshold):
+    def simulation_random_observation_merged_sample_data(self, threshold, is_train_data=False):
         # 일단 random observation 상황에서만 짜보자. unit number가 반복되니.
         # 마저 만들어야 함.
-        dataset = self.add_predicted_RUL_using_saved_pth_partial_observe()
+        dataset = self.add_predicted_RUL_using_saved_pth_partial_observe(is_train_data)
 
         # Data processing
         dataset['predicted_RUL_threshold'] = dataset['predicted_RUL'] - threshold # y^ - threshold
@@ -2235,12 +2279,15 @@ class RunSimulation():
         average_cost_per_time = average_cost_per_engine / average_usage_time_per_engine # a.k.a. lambda
         beta = average_cost_per_time / (-self.REWARD_ACTUAL_FAILURE + self.REWARD_ACTUAL_REPLACE) # by formula
 
-        print(f"Theta : {threshold}, AUT : {average_usage_time_per_engine}, P_failure : {p_failure}, Lambda : {average_cost_per_time}, Beta : {beta}")
+        # beta system 내에서 학습 초기와 끝날 때 개선이 이뤄졌는지 확인하기 위한 코드. 따로 반환값으로 추가하진 않음
+        average_beta_reward = ( (self.td_beta * self.FAILURE_COST) * average_usage_time_per_engine - self.FAILURE_COST * p_failure) / total_number_of_engines
+
+        print(f"Theta : {threshold}, AUT : {average_usage_time_per_engine}, P_failure : {p_failure}, Lambda : {average_cost_per_time}, Beta : {beta}, Average beta reward : {average_beta_reward}")
 
         return threshold, average_usage_time_per_engine, p_failure, average_cost_per_time, beta
 
 
-    def generate_threshold_simulation_data(self, start=0, end=100, step=1):
+    def generate_threshold_simulation_data(self, start=25, end=60, step=0.1):
         # simulation_random_observation_merged_sample_data를 threshold를 바꿔가며 실행.
         # theta^*을 찾기 위한 method.
         results_df = pd.DataFrame(
@@ -2250,7 +2297,7 @@ class RunSimulation():
         for threshold in [start + x * step for x in range(int((end - start) / step) + 1)]:
             # 각 threshold에 대해 함수 호출
             threshold, avg_usage_time, p_failure, avg_cost_per_time, beta = self.simulation_random_observation_merged_sample_data(
-                threshold)
+                threshold, is_train_data=False)
 
             # 반환된 값을 한 행으로 데이터프레임에 추가
             new_row = pd.DataFrame({
@@ -2355,7 +2402,7 @@ class RunSimulation():
 """generate instance"""
 #run_sim = RunSimulation('config_009.ini')   # 전체 관측, (MSE) or (TD Loss, alpha 0.1, theta 0)
 #run_sim = RunSimulation('config_010.ini')  # 10% 관측, TD Loss, alpha 0.1, theta 0
-#run_sim = RunSimulation('config_011.ini')  # 10% 관측, MSE Loss (2000 epoch)
+#run_sim = RunSimulation('config_011.ini')  # 10% 관측, MSE Loss (1000 epoch)
 #run_sim = RunSimulation('config_012.ini')  # 10% 관측, TD Loss, alpha 0.9, theta 0
 #run_sim = RunSimulation('config_013.ini')  # 10% 관측, TD Loss, alpha 0.5, theta 0
 #run_sim = RunSimulation('config_014.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 0, beta 0.000684
@@ -2363,22 +2410,24 @@ class RunSimulation():
 #run_sim = RunSimulation('config_016.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 42.7, beta 0.001370
 #run_sim = RunSimulation('config_017.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 42.7, beta 0.001370
 #run_sim = RunSimulation('config_018.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 42.7, beta 0.001370
-run_sim = RunSimulation('config_019.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 58.8, beta 0.000701 (2000 epoch)
-
+#run_sim = RunSimulation('config_019.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 58.8, beta 0.000701 (2000 epoch)
+#run_sim = RunSimulation('config_020.ini')   # 10% 관측, TD Loss, alpha 1.0, theta 41.8, beta 0.000687 (2000 epoch)
+run_sim = RunSimulation('config_021.ini')   # 10% 관측, TD Loss, alpha 0.1, theta 41.8, beta 0.000687 (2000 epoch)
 
 
 """ ###############################
 Deep Convolution Neural Network
 """
 #run_sim.run_DCNN()  # DCNN 학습.
+run_sim.run_continue_DCNN() # 이미 학습된 weight(dcnn_model.pth)을 이어서 학습하는 코드
 
 #run_sim.simulation_random_observation_merged_sample_data(30) # 학습한 모델로 threshold 0에서 테스트
 
 #run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = False) # 학습된 모델로 RUL prediction 수행 (모든 데이터 관측 가능).
-#run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
+run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (10% 데이터만 관측 가능).
 
-
-run_sim.generate_threshold_simulation_data() # Find optimal theta. (MSE로 학습시킨 모델로 찾음.)
+# 최적의 threshold 찾기
+#run_sim.generate_threshold_simulation_data() # Find optimal theta. (MSE로 학습시킨 모델로 찾음.)
 
 
 """ ################################
