@@ -2231,7 +2231,6 @@ class RunSimulation():
 
     def simulation_random_observation_merged_sample_data(self, threshold, is_train_data=False):
         # 일단 random observation 상황에서만 짜보자. unit number가 반복되니.
-        # 마저 만들어야 함.
         dataset = self.add_predicted_RUL_using_saved_pth_partial_observe(is_train_data)
 
         # Data processing
@@ -2287,7 +2286,7 @@ class RunSimulation():
         return threshold, average_usage_time_per_engine, p_failure, average_cost_per_time, beta
 
 
-    def generate_threshold_simulation_data(self, start=10, end=25, step=0.1):
+    def generate_threshold_simulation_data(self, start=0, end=40, step=0.1):
         # simulation_random_observation_merged_sample_data를 threshold를 바꿔가며 실행.
         # theta^*을 찾기 위한 method.
         results_df = pd.DataFrame(
@@ -2297,7 +2296,7 @@ class RunSimulation():
         for threshold in [start + x * step for x in range(int((end - start) / step) + 1)]:
             # 각 threshold에 대해 함수 호출
             threshold, avg_usage_time, p_failure, avg_cost_per_time, beta = self.simulation_random_observation_merged_sample_data(
-                threshold, is_train_data=False)
+                threshold, is_train_data=True)
 
             # 반환된 값을 한 행으로 데이터프레임에 추가
             new_row = pd.DataFrame({
