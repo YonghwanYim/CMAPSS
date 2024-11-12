@@ -18,7 +18,7 @@ import torch
 import gc
 
 # Custom .py
-from linear_regression_TD import Linear_Regression_TD
+#from linear_regression_TD import Linear_Regression_TD
 from simulation_env import SimulationEnvironment
 from loss import directed_mse_loss
 from loss_td import DecisionAwareTD
@@ -2296,7 +2296,7 @@ class RunSimulation():
         for threshold in [start + x * step for x in range(int((end - start) / step) + 1)]:
             # 각 threshold에 대해 함수 호출
             threshold, avg_usage_time, p_failure, avg_cost_per_time, beta = self.simulation_random_observation_merged_sample_data(
-                threshold, is_train_data=True)
+                threshold, is_train_data=False) # Test data를 쓸 때는, is_train_data=False
 
             # 반환된 값을 한 행으로 데이터프레임에 추가
             new_row = pd.DataFrame({
@@ -2349,7 +2349,9 @@ class RunSimulation():
         # 마지막 샘플만 RUL plot (valid 1개 샘플 사이즈는 650. 나중에 수정; 10% 관측의 경우)
         if is_partial_observe:
             #last_sample = valid_data_with_predicted_RUL.tail(650) # 10%만 관측 가능할 때.
-            last_sample = valid_data_with_predicted_RUL.tail(1950) # 30% 관측 가능
+            #last_sample = valid_data_with_predicted_RUL.tail(1300) # 20%만 관측 가능할 때,
+            #last_sample = valid_data_with_predicted_RUL.tail(1950) # 30% 관측 가능,
+            last_sample = valid_data_with_predicted_RUL.tail(3250)  # 50% 관측 가능
         else:
             last_sample = valid_data_with_predicted_RUL.tail(6501) # 전체 데이터 관측 가능할 때.
 
@@ -2426,8 +2428,12 @@ class RunSimulation():
 
 
 # Observation Probability 수정 후 테스트 (MSE는 1000 epoch 학습; Cost는 그대로)
-run_sim = RunSimulation('config_028.ini')   # 30% 관측, TD alpha 0.1, theta 16, beta 0.000558
-
+#run_sim = RunSimulation('config_028.ini')   # 30% 관측, MSE
+#run_sim = RunSimulation('config_029.ini')   # 30% 관측, TD alpha 0.1, theta 19.6, beta 0.000612
+#run_sim = RunSimulation('config_030.ini')   # 20% 관측, MSE
+#run_sim = RunSimulation('config_031.ini')   # 20% 관측, TD alpha 0.1, theta 25.6, beta 0.000646
+#run_sim = RunSimulation('config_032.ini')   # 50% 관측, MSE
+run_sim = RunSimulation('config_033.ini')   # 50% 관측, TD alpha 0.1, theta 12.5, beta 0.000586
 
 """ ###############################
 Deep Convolution Neural Network
