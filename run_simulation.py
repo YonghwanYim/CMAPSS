@@ -2286,7 +2286,7 @@ class RunSimulation():
         return threshold, average_usage_time_per_engine, p_failure, average_cost_per_time, beta
 
 
-    def generate_threshold_simulation_data(self, start=0, end=40, step=0.1):
+    def generate_threshold_simulation_data(self, start=39.8, end=50, step=0.1):
         # simulation_random_observation_merged_sample_data를 threshold를 바꿔가며 실행.
         # theta^*을 찾기 위한 method.
         results_df = pd.DataFrame(
@@ -2354,8 +2354,10 @@ class RunSimulation():
             #last_sample = valid_data_with_predicted_RUL.tail(3250)  # 50% 관측 가능
 
             # dataset 3
-            last_sample = valid_data_with_predicted_RUL.tail(1433)  # 20% 관측 가능,
+            #last_sample = valid_data_with_predicted_RUL.tail(1433)  # 20% 관측 가능,
+            #last_sample = valid_data_with_predicted_RUL.tail(1640)  # 20% 관측 가능 (front),
             #last_sample = valid_data_with_predicted_RUL.tail(2150)  # 30% 관측 가능,
+            last_sample = valid_data_with_predicted_RUL.tail(2460)  # 30% 관측 가능 (front),
         else:
             last_sample = valid_data_with_predicted_RUL.tail(6501) # 전체 데이터 관측 가능할 때.
 
@@ -2440,16 +2442,17 @@ class RunSimulation():
 #run_sim = RunSimulation('config_033.ini')   # 50% 관측, TD alpha 0.1, theta 12.5, beta 0.000586
 
 # Dataset 3
-# run_sim = RunSimulation('config_034.ini')  # 30% 관측 MSE
-#run_sim = RunSimulation('config_035.ini')  # 30% 관측, TD alpha 0.1, theta 28.3, beta 0.000498
+#run_sim = RunSimulation('config_034.ini')  # 30% 관측 MSE
+run_sim = RunSimulation('config_035.ini')  # 30% 관측, TD alpha 0.1, theta 23.3, beta 0.000514
+
 #run_sim = RunSimulation('config_036.ini')  # 20% 관측 MSE
-run_sim = RunSimulation('config_037.ini')  # 20% 관측 MSE, TD alpha 0.1,
+#run_sim = RunSimulation('config_037.ini')  # 20% 관측 MSE, TD alpha 0.1, theta 23.3, beta 0.000518
 
 """ ###############################
 Deep Convolution Neural Network
 """
 #run_sim.run_DCNN()  # DCNN 학습.
-run_sim.run_continue_DCNN() # 이미 학습된 weight(dcnn_model.pth)을 이어서 학습하는 코드
+#run_sim.run_continue_DCNN() # 이미 학습된 weight(dcnn_model.pth)을 이어서 학습하는 코드
 
 #run_sim.simulation_random_observation_merged_sample_data(41.8) # 학습한 모델로, 인자로 넣은 threshold 에서 테스트
 
@@ -2457,8 +2460,8 @@ run_sim.run_continue_DCNN() # 이미 학습된 weight(dcnn_model.pth)을 이어�
 run_sim.plot_RUL_prediction_using_saved_pth(is_partial_observe = True) # 학습된 모델로 RUL prediction 수행 (n % 데이터만 관측 가능).
 
 # 최적의 threshold 찾기
-run_sim.generate_threshold_simulation_data() # Find optimal theta (in train data).
-#run_sim.generate_threshold_simulation_data() # Find optimal theta (in test data).
+#run_sim.generate_threshold_simulation_data() # Find optimal theta (train, test 여부는 함수 내에서 수정).
+
 
 
 """ ################################
