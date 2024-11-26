@@ -279,27 +279,34 @@ class SimulationEnvironment():
         # Set subplot
         fig, ax = plt.subplots(figsize=(16, 9))
 
+        """
         # Plot for each unit_number
         for unit, group in grouped:
             ax.plot(group['RUL'], group['predicted_RUL'])
+        """
+        # Plot for each unit_number with label only for the first line
+        for idx, (unit, group) in enumerate(grouped):
+            if idx == 0:  # 첫 번째 그래프에만 label 추가 (모든 선에 label을 붙이면 지저분함)
+                ax.plot(group['RUL'], group['predicted_RUL'], label='Predicted RUL for Each Engine')
+            else:
+                ax.plot(group['RUL'], group['predicted_RUL'])
 
         # Draw a red dashed line at y=threshold
-        ax.axhline(y=threshold, color='r', linestyle='--', label='threshold')
+        ax.axhline(y=threshold, color='r', linestyle='--', label='threshold (surrogate)')
 
         # Plot a purple dashed line with slope -45 degrees passing through (0, 0)
-        x_vals = np.linspace(0, 350, 100)  # x-values from -350 to 0
-        y_vals = x_vals  # y-values corresponding to y = x
-        ax.plot(x_vals, y_vals, 'b--', linewidth=2, label='y = x')  # Plot purple dashed line
+        #x_vals = np.linspace(0, 350, 100)  # x-values from -350 to 0
+        #y_vals = x_vals  # y-values corresponding to y = x
+        #ax.plot(x_vals, y_vals, 'b--', linewidth=2, label='y = x')  # Plot purple dashed line
 
-        ax.set_xlabel('Remaining Useful Life')
-        ax.set_ylabel('Predicted RUL')
-        ax.set_title('Predicted RUL by Unit Number')
-        ax.legend(loc='upper right')  # Add legend
+        ax.set_xlabel('Actual Remaining Useful Life', fontsize=17, labelpad=10)
+        ax.set_ylabel('Predicted RUL', fontsize=17)
+        ax.set_title('Predicted RUL for Each Engine in Test Data', fontsize=19, pad=15)
+        ax.legend(loc='upper right', fontsize=13)  # Add legend
 
         # Plot settings
-        plt.xlim(350, 0)  # Reverse the x-axis so RUL counts down to zero
-        plt.ylim(-350, 400)
-        #plt.ylim(-50, 200)
+        plt.xlim(320, 0)  # Reverse the x-axis so RUL counts down to zero
+        plt.ylim(-100, 320)
         plt.show()
 
     def plot_RUL_prediction_by_lr_td_loss_21(self, environment, weights, scale, threshold):

@@ -2185,7 +2185,7 @@ class RunSimulation():
         return self.valid_dataset
 
     def add_predicted_RUL_using_saved_pth_partial_observe(self, is_train_data=False):
-        # 10% 관측 가능할 때 전용 method.
+        # n % 관측 가능할 때 전용 method.
         # Model creation
         model = DCNN(self.DCNN_N_tw, self.DCNN_N_ft, self.DCNN_F_N, self.DCNN_F_L, self.DCNN_neurons_fc,
                      self.DCNN_dropout_rate)
@@ -2286,7 +2286,7 @@ class RunSimulation():
         return threshold, average_usage_time_per_engine, p_failure, average_cost_per_time, beta
 
 
-    def generate_threshold_simulation_data(self, start=20, end=60, step=0.1):
+    def generate_threshold_simulation_data(self, start=20, end=40, step=0.1):
         # simulation_random_observation_merged_sample_data를 threshold를 바꿔가며 실행.
         # theta^*을 찾기 위한 method.
         results_df = pd.DataFrame(
@@ -2354,8 +2354,8 @@ class RunSimulation():
             #last_sample = valid_data_with_predicted_RUL.tail(3250)  # 50% 관측 가능
 
             # front setting
-            last_sample = valid_data_with_predicted_RUL.tail(599) # 10%만 관측 가능할 때.
-            #last_sample = valid_data_with_predicted_RUL.tail(1197)  # 20%만 관측 가능할 때,
+            #last_sample = valid_data_with_predicted_RUL.tail(599) # 10%만 관측 가능할 때.
+            last_sample = valid_data_with_predicted_RUL.tail(1197)  # 20%만 관측 가능할 때,
 
             # dataset 3
             #last_sample = valid_data_with_predicted_RUL.tail(1433)  # 20% 관측 가능,
@@ -2442,10 +2442,7 @@ class RunSimulation():
 #run_sim = RunSimulation('config_029.ini')   # 30% 관측, TD alpha 0.1, theta 19.6, beta 0.000612
 
 #run_sim = RunSimulation('config_038.ini')   # 10% 관측, MSE
-run_sim = RunSimulation('config_039.ini')   # 10% 관측, TD alpha 0.1, theta 44.2, beta 0.000701
-
-#run_sim = RunSimulation('config_030.ini')   # 20% 관측, MSE (front)
-#run_sim = RunSimulation('config_031.ini')   # 20% 관측, TD alpha 0.1, theta 25.6, beta 0.000646 (front)
+#run_sim = RunSimulation('config_039.ini')   # 10% 관측, TD alpha 0.1, theta 44.2, beta 0.000701
 
 #run_sim = RunSimulation('config_032.ini')   # 50% 관측, MSE
 #run_sim = RunSimulation('config_033.ini')   # 50% 관측, TD alpha 0.1, theta 12.5, beta 0.000586
@@ -2456,6 +2453,11 @@ run_sim = RunSimulation('config_039.ini')   # 10% 관측, TD alpha 0.1, theta 44
 
 #run_sim = RunSimulation('config_036.ini')  # 20% 관측 MSE
 #run_sim = RunSimulation('config_037.ini')  # 20% 관측 MSE, TD alpha 0.1, theta 23.3, beta 0.000518
+
+
+### 최종적으로 사용하는 config ###
+#run_sim = RunSimulation('config_030.ini')   # 20% 관측, MSE (front)
+run_sim = RunSimulation('config_031.ini')   # 20% 관측, TD alpha 0.1, theta 29.4, beta 0.000618 (front)
 
 """ ###############################
 Deep Convolution Neural Network
