@@ -34,8 +34,8 @@ class SimulationEnvironment():
         data = pd.read_csv(dataset_path, sep='\s+', header=None, index_col=False, names=self.col_names)
 
         # dataset의 unit_number를 기준으로 train, valid, full data로 나누기
-        train = data[data['unit_number'] >= split_number]  # train data (fitting)
-        valid = data[data['unit_number'] < split_number]   # valid data
+        train = data[data['unit_number'] <= split_number]  # train data (fitting)
+        valid = data[data['unit_number'] > split_number]   # valid data
         full = data.copy()                                 # full data
 
         return train, valid, full

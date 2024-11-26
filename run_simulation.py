@@ -2286,7 +2286,7 @@ class RunSimulation():
         return threshold, average_usage_time_per_engine, p_failure, average_cost_per_time, beta
 
 
-    def generate_threshold_simulation_data(self, start=20, end=40, step=0.1):
+    def generate_threshold_simulation_data(self, start=26.2, end=26.3, step=0.1):
         # simulation_random_observation_merged_sample_data를 threshold를 바꿔가며 실행.
         # theta^*을 찾기 위한 method.
         results_df = pd.DataFrame(
@@ -2355,7 +2355,7 @@ class RunSimulation():
 
             # front setting
             #last_sample = valid_data_with_predicted_RUL.tail(599) # 10%만 관측 가능할 때.
-            last_sample = valid_data_with_predicted_RUL.tail(1197)  # 20%만 관측 가능할 때,
+            last_sample = valid_data_with_predicted_RUL.tail(1300)  # 20%만 관측 가능할 때,
 
             # dataset 3
             #last_sample = valid_data_with_predicted_RUL.tail(1433)  # 20% 관측 가능,
@@ -2455,9 +2455,15 @@ class RunSimulation():
 #run_sim = RunSimulation('config_037.ini')  # 20% 관측 MSE, TD alpha 0.1, theta 23.3, beta 0.000518
 
 
-### 최종적으로 사용하는 config ###
+### 최종적으로 사용하는 config (최종 아님..) ###
 #run_sim = RunSimulation('config_030.ini')   # 20% 관측, MSE (front)
-run_sim = RunSimulation('config_031.ini')   # 20% 관측, TD alpha 0.1, theta 29.4, beta 0.000618 (front)
+#run_sim = RunSimulation('config_031.ini')   # 20% 관측, TD alpha 0.1, theta 29.4, beta 0.000618 (front)
+
+### 진짜 최종 config ###
+#run_sim = RunSimulation('config_040.ini')   # 20% 관측, MSE, 2000epoch
+run_sim = RunSimulation('config_041.ini')   # 20% 관측, TD alpha 0.1, theta 19.1, beta 0.000633
+
+
 
 """ ###############################
 Deep Convolution Neural Network
