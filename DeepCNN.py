@@ -4,9 +4,7 @@
 """
 # Custom TD Loss function
 from CustomTDLoss import CustomTDLoss
-
-# directory를 자동으로 가져오기 위함.
-import os
+import os           # directory를 자동으로 가져오기 위함.
 import numpy as np
 
 import torch
@@ -15,9 +13,16 @@ import torch.optim as optim
 
 # x_train: (N, 30, 14), y_train: (N,)
 # x_train should be permuted to (N, 14, 30) because PyTorch expects (batch_size, in_channels, seq_length)
+"""
+The structure is the same as the DCNN paper.
+However, this code does not apply 'piecewise linear'.
+Degradation begins from the start of the lifetime.
 
-# 모델 정의는 독립적으로 클래스화
-# 논문에서 다룬것과 동일. piecewise linear 셋팅만 제외하고.
+* piecewise linear 
+- Assume the lifetime is constant during the initial normal state.
+- Degradation is considered to begin after a certain point in time.
+"""
+
 class DCNN(nn.Module):
     def __init__(self, N_tw=30, N_ft=14, FN=10, FL=10, neurons_fc=100, dropout_rate=0.5):
         super(DCNN, self).__init__() # DCNN class는 PyTorch의 nn.Module 상속받음. 따라서 parent class를 initialize
@@ -159,12 +164,6 @@ class DCNN_Model:
 
                 """ 이 부분이 있어야 y^{t+1}을 loss 내에서 계산 가능. """
 
-                # test (batch shape 보는 코드)
-                #print(f"x_batch shape: {x_batch.shape}")
-                #print(f"y_batch shape: {y_batch.shape}")
-                #print("x_batch")
-                #print(x_batch)
-
                 # Zero the parameter gradients
                 self.optimizer.zero_grad()
 
@@ -175,8 +174,6 @@ class DCNN_Model:
                 except Exception as e:
                     print(f"Error during forward pass: {e}")
 
-                #print('outputs.squeeze()')
-                #print(outputs.squeeze())
 
                 # squeeze로 output의 차원을 줄임. loss 계산시 차원이 일치하도록 함. 인자로 ObsTime, last_TC가 들어감.
                 if self.is_td_loss:
