@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
-
-# 이 파일은 의미 없음. (TD Loss에 max operator를 고려하지 않았을 때 버전임)
+"""
+This file is not used at the moment, so it can be ignored.
+Version of the TD Loss function without the max operator.
+"""
 
 # simulation.py 에서 사용할 때, data sample의 수 만큼 처음에 초기화해두고 가져다 쓰도록 구현.
 class DecisionAwareTD:
@@ -95,6 +97,7 @@ class DecisionAwareTD:
         return mean_gradient
 
     def calculate_closed_form_solution(self, lambd):
+        # Directly derive the closed-form solution.
         self.X_t = self.delete_row1_dataset[self.features]
         self.Y = self.delete_row1_dataset['RUL']
         self.Y_X = self.Y.T.dot(self.X_t) # 이 값이 압도적으로 큼.
@@ -114,16 +117,6 @@ class DecisionAwareTD:
 
         # compute the (Moore-Penrose) pseudo-inverse of a matrix.
         inverse_second_term = np.linalg.inv(second_term + self.lambda_identity)
-
-        #print(inverse_second_term)
-        #print((second_term + self.lambda_identity).dot(inverse_second_term))
-
-        # checks that a * a+ * a == a and a+ * a * a+ == a+ (a+ : pseudo-inverse of a matrix)
-        #                                                             np.dot(inverse_second_term,
-        #                                                                    second_term + self.lambda_identity))))
-        #print(np.allclose(inverse_second_term, np.dot(inverse_second_term,
-        #                                                             np.dot(second_term + self.lambda_identity,
-        #                                                                    inverse_second_term))))
 
         solution = (self.Y_X - self.alpha * self.TD.T.dot(self.X_t_diff_X_t_minus_1)).dot(inverse_second_term)
 
@@ -149,16 +142,6 @@ class DecisionAwareTD:
 
         # compute the (Moore-Penrose) pseudo-inverse of a matrix.
         inverse_second_term = np.linalg.pinv(second_term + self.lambda_identity)
-
-        #print(inverse_second_term)
-        #print((second_term + self.lambda_identity).dot(inverse_second_term))
-
-        # checks that a * a+ * a == a and a+ * a * a+ == a+ (a+ : pseudo-inverse of a matrix)
-        #                                                             np.dot(inverse_second_term,
-        #                                                                    second_term + self.lambda_identity))))
-        #print(np.allclose(inverse_second_term, np.dot(inverse_second_term,
-        #                                                             np.dot(second_term + self.lambda_identity,
-        #                                                                    inverse_second_term))))
 
         solution = ((1 - self.alpha) * self.Y_X - self.alpha * self.TD.T.dot(self.X_t_diff_X_t_minus_1)).dot(inverse_second_term)
 
