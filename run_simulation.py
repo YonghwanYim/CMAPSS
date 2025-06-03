@@ -709,11 +709,6 @@ class RunSimulation():
                     replace_failure += 1
 
                 # update q-value (Linear Function Approximation)
-                # 기존에 잘못하고 있었던 코드.
-                """
-                # next state q는 max_q로 구하고, current action은 continue.
-                next_state_q = max([np.dot(self.agent.weights[a], next_state) for a in self.agent.actions]) """
-
                 # 새롭게 변경한 코드. 기존과 달리 현재 state가 엔진 내에서 마지막 state라면 next_q는 0으로 되도록 함.
                 # 이렇게 해야 RUL prediction과 연관지을 때 괴리가 없음. 안그러면 다음 엔진의 첫번째 state의 q-value를 가져오게됨.
                 if current_reward == self.reward.r_continue_but_failure:
